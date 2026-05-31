@@ -16,6 +16,11 @@ const totalMetric = document.querySelector('#totalMetric');
 const approvedMetric = document.querySelector('#approvedMetric');
 const blockedMetric = document.querySelector('#blockedMetric');
 const misuseRateMetric = document.querySelector('#misuseRateMetric');
+const fillValidTransactionButton = document.querySelector('#fillValidTransaction');
+const fillBlockedTransactionButton = document.querySelector('#fillBlockedTransaction');
+const resetTransactionFormButton = document.querySelector('#resetTransactionForm');
+const fillPrescriptionDemoButton = document.querySelector('#fillPrescriptionDemo');
+const resetPrescriptionFormButton = document.querySelector('#resetPrescriptionForm');
 
 let lookupTimer = null;
 let currentMedicineResults = [];
@@ -57,6 +62,20 @@ function formatTimestamp(timestamp) {
     minute: '2-digit',
     second: '2-digit'
   }).format(new Date(timestamp));
+}
+
+function setFormValues(targetForm, values) {
+  Object.entries(values).forEach(([name, value]) => {
+    const field = targetForm.elements.namedItem(name);
+
+    if (field) {
+      field.value = value;
+    }
+  });
+}
+
+function clearAlert(target) {
+  target.innerHTML = '';
 }
 
 function setActiveTab(panelId) {
@@ -309,6 +328,64 @@ medicineSuggestions.addEventListener('mousedown', (event) => {
     hideMedicineSuggestions();
     lookupSource.textContent = `Selected: ${medicine.source}`;
   }
+});
+
+fillValidTransactionButton.addEventListener('click', () => {
+  setFormValues(form, {
+    patientId: '12345',
+    hospitalName: 'National General Hospital',
+    prescriberLicense: '98765',
+    antibiotic: 'Amoxicillin',
+    antibioticClass: 'Penicillin',
+    dosage: '500mg',
+    quantity: '10',
+    treatmentDurationDays: '5'
+  });
+  clearAlert(alertArea);
+  lookupSource.textContent = '';
+});
+
+fillBlockedTransactionButton.addEventListener('click', () => {
+  setFormValues(form, {
+    patientId: '00000',
+    hospitalName: 'National General Hospital',
+    prescriberLicense: '98765',
+    antibiotic: 'Amoxicillin',
+    antibioticClass: 'Penicillin',
+    dosage: '500mg',
+    quantity: '1',
+    treatmentDurationDays: '5'
+  });
+  clearAlert(alertArea);
+  lookupSource.textContent = '';
+});
+
+resetTransactionFormButton.addEventListener('click', () => {
+  form.reset();
+  clearAlert(alertArea);
+  lookupSource.textContent = '';
+  medicineOptions.innerHTML = '';
+  hideMedicineSuggestions();
+});
+
+fillPrescriptionDemoButton.addEventListener('click', () => {
+  setFormValues(prescriptionForm, {
+    patientId: '77777',
+    hospitalName: 'University Medical Center',
+    prescriberLicense: 'DOC-2026',
+    antibioticName: 'Cefixime',
+    antibioticClass: 'Cephalosporin',
+    dosage: '200mg',
+    quantityLimit: '14',
+    treatmentDurationDays: '7',
+    expiryDate: '2027-12-31'
+  });
+  clearAlert(prescriptionAlertArea);
+});
+
+resetPrescriptionFormButton.addEventListener('click', () => {
+  prescriptionForm.reset();
+  clearAlert(prescriptionAlertArea);
 });
 
 document.addEventListener('mousedown', (event) => {

@@ -37,13 +37,18 @@
       <section class="tab-panel active" id="posPanel">
         <div class="panel-heading">
           <h2>Pharmacy POS</h2>
-          <span class="panel-chip">Live validation</span>
+          <div class="panel-actions">
+            <span class="panel-chip">Live validation</span>
+            <button class="ghost-button" id="fillValidTransaction" type="button">Valid Demo</button>
+            <button class="ghost-button" id="fillBlockedTransaction" type="button">Blocked Demo</button>
+            <button class="ghost-button" id="resetTransactionForm" type="button">Reset</button>
+          </div>
         </div>
 
         <form class="transaction-form" id="transactionForm">
           <label>
             <span>Patient ID</span>
-            <input id="patientId" name="patientId" type="text" autocomplete="off" required>
+            <input id="patientId" name="patientId" type="text" placeholder="12345" autocomplete="off" required>
           </label>
 
           <label>
@@ -53,7 +58,7 @@
 
           <label>
             <span>Prescriber License Number</span>
-            <input id="prescriberLicense" name="prescriberLicense" type="text" autocomplete="off" required>
+            <input id="prescriberLicense" name="prescriberLicense" type="text" placeholder="98765" autocomplete="off" required>
           </label>
 
           <label>
@@ -67,6 +72,7 @@
                 autocomplete="off"
                 aria-controls="medicineSuggestions"
                 aria-expanded="false"
+                placeholder="Amoxicillin"
                 required
               >
               <div class="medicine-suggestions" id="medicineSuggestions" role="listbox"></div>
@@ -96,12 +102,12 @@
 
           <label>
             <span>Quantity</span>
-            <input id="quantity" name="quantity" type="number" min="1" step="1" required>
+            <input id="quantity" name="quantity" type="number" min="1" step="1" placeholder="10" required>
           </label>
 
           <label>
             <span>Treatment Duration (days)</span>
-            <input id="treatmentDurationDays" name="treatmentDurationDays" type="number" min="1" step="1" required>
+            <input id="treatmentDurationDays" name="treatmentDurationDays" type="number" min="1" step="1" placeholder="5" required>
           </label>
 
           <div class="form-actions">
@@ -116,13 +122,17 @@
       <section class="tab-panel" id="doctorPanel">
         <div class="panel-heading">
           <h2>Hospital / Doctor Portal</h2>
-          <span class="panel-chip">Prescription registry</span>
+          <div class="panel-actions">
+            <span class="panel-chip">Prescription registry</span>
+            <button class="ghost-button" id="fillPrescriptionDemo" type="button">Doctor Demo</button>
+            <button class="ghost-button" id="resetPrescriptionForm" type="button">Reset</button>
+          </div>
         </div>
 
         <form class="transaction-form" id="prescriptionForm">
           <label>
             <span>Patient ID</span>
-            <input name="patientId" type="text" autocomplete="off" required>
+            <input name="patientId" type="text" placeholder="77777" autocomplete="off" required>
           </label>
 
           <label>
@@ -132,12 +142,12 @@
 
           <label>
             <span>Prescriber License Number</span>
-            <input name="prescriberLicense" type="text" autocomplete="off" required>
+            <input name="prescriberLicense" type="text" placeholder="DOC-2026" autocomplete="off" required>
           </label>
 
           <label>
             <span>Antibiotic Name</span>
-            <input name="antibioticName" type="text" autocomplete="off" required>
+            <input name="antibioticName" type="text" placeholder="Cefixime" autocomplete="off" required>
           </label>
 
           <label>
@@ -162,12 +172,12 @@
 
           <label>
             <span>Quantity Limit</span>
-            <input name="quantityLimit" type="number" min="1" step="1" required>
+            <input name="quantityLimit" type="number" min="1" step="1" placeholder="14" required>
           </label>
 
           <label>
             <span>Treatment Duration (days)</span>
-            <input name="treatmentDurationDays" type="number" min="1" step="1" required>
+            <input name="treatmentDurationDays" type="number" min="1" step="1" placeholder="7" required>
           </label>
 
           <label>
@@ -212,7 +222,9 @@
       <section class="tab-panel" id="dashboardPanel">
         <div class="panel-heading">
           <h2>MOH Dashboard</h2>
-          <button class="secondary-button" id="clearDataButton" type="button">Clear Data</button>
+          <div class="panel-actions">
+            <button class="secondary-button" id="clearDataButton" type="button">Clear Data</button>
+          </div>
         </div>
 
         <div class="metrics-grid" aria-label="MOH surveillance summary">
