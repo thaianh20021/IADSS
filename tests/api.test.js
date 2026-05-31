@@ -36,6 +36,7 @@ describe('IADSS API', () => {
       .post('/api/transactions')
       .send({
         patientId: '12345',
+        hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
         antibiotic: 'Amoxicillin',
         antibioticClass: 'Penicillin',
@@ -54,6 +55,7 @@ describe('IADSS API', () => {
       .post('/api/prescriptions')
       .send({
         patientId: '77777',
+        hospitalName: 'University Medical Center',
         prescriberLicense: 'DOC-2026',
         antibioticName: 'Cefixime',
         antibioticClass: 'Cephalosporin',
@@ -70,6 +72,7 @@ describe('IADSS API', () => {
       .post('/api/transactions')
       .send({
         patientId: '77777',
+        hospitalName: 'University Medical Center',
         prescriberLicense: 'DOC-2026',
         antibiotic: 'Cefixime',
         antibioticClass: 'Cephalosporin',
@@ -87,6 +90,7 @@ describe('IADSS API', () => {
       .post('/api/transactions')
       .send({
         patientId: '00000',
+        hospitalName: 'National General Hospital',
         antibiotic: 'Amoxicillin',
         quantity: 1
       })
@@ -101,6 +105,7 @@ describe('IADSS API', () => {
       .post('/api/transactions')
       .send({
         patientId: '12345',
+        hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
         antibiotic: 'Doxycycline',
         antibioticClass: 'Tetracycline',
@@ -114,11 +119,31 @@ describe('IADSS API', () => {
     assert.equal(response.body.transaction.reason, 'Invalid prescription details.');
   });
 
+  it('blocks transactions from the wrong hospital or clinic', async () => {
+    const response = await request(app)
+      .post('/api/transactions')
+      .send({
+        patientId: '12345',
+        hospitalName: 'Wrong Hospital',
+        prescriberLicense: '98765',
+        antibiotic: 'Amoxicillin',
+        antibioticClass: 'Penicillin',
+        dosage: '500mg',
+        quantity: 10,
+        treatmentDurationDays: 5
+      })
+      .expect(201);
+
+    assert.equal(response.body.transaction.status, 'Blocked');
+    assert.equal(response.body.transaction.reason, 'Invalid prescription details.');
+  });
+
   it('blocks transactions that exceed the prescription quantity limit', async () => {
     const response = await request(app)
       .post('/api/transactions')
       .send({
         patientId: '12345',
+        hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
         antibiotic: 'Amoxicillin',
         antibioticClass: 'Penicillin',
@@ -137,6 +162,7 @@ describe('IADSS API', () => {
       .post('/api/transactions')
       .send({
         patientId: '12345',
+        hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
         antibiotic: 'Amoxicillin',
         antibioticClass: 'Penicillin',
@@ -155,6 +181,7 @@ describe('IADSS API', () => {
       .post('/api/transactions')
       .send({
         patientId: '12345',
+        hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
         antibiotic: 'Amoxicillin',
         antibioticClass: 'Macrolide',
@@ -171,7 +198,7 @@ describe('IADSS API', () => {
   it('returns transaction history and clears it', async () => {
     const history = await request(app).get('/api/transactions').expect(200);
 
-    assert.equal(history.body.transactions.length, 7);
+    assert.equal(history.body.transactions.length, 8);
     assert.equal(history.body.transactions[0].status, 'Blocked');
 
     await request(app).delete('/api/transactions').expect(200);

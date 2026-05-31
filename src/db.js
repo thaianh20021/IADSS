@@ -33,6 +33,7 @@ export const FALLBACK_ANTIBIOTICS = [
 export const SEED_PRESCRIPTIONS = [
   {
     patientId: '12345',
+    hospitalName: 'National General Hospital',
     prescriberLicense: '98765',
     antibioticName: 'Amoxicillin',
     antibioticClass: 'Penicillin',
@@ -43,6 +44,7 @@ export const SEED_PRESCRIPTIONS = [
   },
   {
     patientId: '24680',
+    hospitalName: 'City Children Hospital',
     prescriberLicense: '13579',
     antibioticName: 'Azithromycin',
     antibioticClass: 'Macrolide',
@@ -53,6 +55,7 @@ export const SEED_PRESCRIPTIONS = [
   },
   {
     patientId: '11223',
+    hospitalName: 'District Medical Center',
     prescriberLicense: '44556',
     antibioticName: 'Cephalexin',
     antibioticClass: 'Cephalosporin',
@@ -97,6 +100,7 @@ class PostgresDatabase {
       CREATE TABLE IF NOT EXISTS valid_prescriptions (
         id SERIAL PRIMARY KEY,
         patient_id TEXT NOT NULL,
+        hospital_name TEXT NOT NULL DEFAULT '',
         prescriber_license TEXT NOT NULL,
         antibiotic_name TEXT NOT NULL,
         antibiotic_class TEXT NOT NULL DEFAULT '',
@@ -114,6 +118,7 @@ class PostgresDatabase {
         id SERIAL PRIMARY KEY,
         timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         patient_id TEXT,
+        hospital_name TEXT,
         prescriber_license TEXT,
         antibiotic TEXT,
         antibiotic_class TEXT,
@@ -125,9 +130,11 @@ class PostgresDatabase {
       );
     `);
 
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS hospital_name TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS antibiotic_class TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dosage TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS treatment_duration_days INTEGER NOT NULL DEFAULT 1;');
+    await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS hospital_name TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS antibiotic_class TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS dosage TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS treatment_duration_days INTEGER;');
@@ -146,6 +153,7 @@ class PostgresDatabase {
         `
           INSERT INTO valid_prescriptions (
             patient_id,
+            hospital_name,
             prescriber_license,
             antibiotic_name,
             antibiotic_class,
@@ -154,11 +162,17 @@ class PostgresDatabase {
             treatment_duration_days,
             expiry_date
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (patient_id, prescriber_license, antibiotic_name) DO NOTHING;
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT (patient_id, prescriber_license, antibiotic_name)
+          DO UPDATE SET
+            hospital_name = COALESCE(NULLIF(valid_prescriptions.hospital_name, ''), EXCLUDED.hospital_name),
+            antibiotic_class = COALESCE(NULLIF(valid_prescriptions.antibiotic_class, ''), EXCLUDED.antibiotic_class),
+            dosage = COALESCE(NULLIF(valid_prescriptions.dosage, ''), EXCLUDED.dosage),
+            treatment_duration_days = GREATEST(valid_prescriptions.treatment_duration_days, EXCLUDED.treatment_duration_days);
         `,
         [
           prescription.patientId,
+          prescription.hospitalName,
           prescription.prescriberLicense,
           prescription.antibioticName,
           prescription.antibioticClass,
@@ -175,6 +189,7 @@ class PostgresDatabase {
     const result = await this.pool.query(`
       SELECT
         patient_id AS "patientId",
+        hospital_name AS "hospitalName",
         prescriber_license AS "prescriberLicense",
         antibiotic_name AS "antibioticName",
         antibiotic_class AS "antibioticClass",
@@ -194,6 +209,7 @@ class PostgresDatabase {
       `
         INSERT INTO valid_prescriptions (
           patient_id,
+          hospital_name,
           prescriber_license,
           antibiotic_name,
           antibiotic_class,
@@ -202,9 +218,10 @@ class PostgresDatabase {
           treatment_duration_days,
           expiry_date
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (patient_id, prescriber_license, antibiotic_name)
         DO UPDATE SET
+          hospital_name = EXCLUDED.hospital_name,
           antibiotic_class = EXCLUDED.antibiotic_class,
           dosage = EXCLUDED.dosage,
           quantity_limit = EXCLUDED.quantity_limit,
@@ -212,6 +229,7 @@ class PostgresDatabase {
           expiry_date = EXCLUDED.expiry_date
         RETURNING
           patient_id AS "patientId",
+          hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
           antibiotic_name AS "antibioticName",
           antibiotic_class AS "antibioticClass",
@@ -222,6 +240,7 @@ class PostgresDatabase {
       `,
       [
         prescription.patientId,
+        prescription.hospitalName,
         prescription.prescriberLicense,
         prescription.antibioticName,
         prescription.antibioticClass,
@@ -235,11 +254,12 @@ class PostgresDatabase {
     return result.rows[0];
   }
 
-  async findValidPrescription({ patientId, prescriberLicense, antibioticName }) {
+  async findValidPrescription({ patientId, hospitalName, prescriberLicense, antibioticName }) {
     const result = await this.pool.query(
       `
         SELECT
           patient_id AS "patientId",
+          hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
           antibiotic_name AS "antibioticName",
           antibiotic_class AS "antibioticClass",
@@ -249,12 +269,13 @@ class PostgresDatabase {
           expiry_date::text AS "expiryDate"
         FROM valid_prescriptions
         WHERE patient_id = $1
-          AND prescriber_license = $2
-          AND LOWER(antibiotic_name) = LOWER($3)
+          AND LOWER(hospital_name) = LOWER($2)
+          AND prescriber_license = $3
+          AND LOWER(antibiotic_name) = LOWER($4)
           AND expiry_date >= CURRENT_DATE
         LIMIT 1;
       `,
-      [patientId, prescriberLicense, antibioticName]
+      [patientId, hospitalName, prescriberLicense, antibioticName]
     );
 
     return result.rows[0] ?? null;
@@ -265,6 +286,7 @@ class PostgresDatabase {
       `
         INSERT INTO transactions (
           patient_id,
+          hospital_name,
           prescriber_license,
           antibiotic,
           antibiotic_class,
@@ -274,11 +296,12 @@ class PostgresDatabase {
           status,
           reason
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING
           id,
           timestamp,
           patient_id AS "patientId",
+          hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
           antibiotic,
           antibiotic_class AS "antibioticClass",
@@ -290,6 +313,7 @@ class PostgresDatabase {
       `,
       [
         transaction.patientId,
+        transaction.hospitalName,
         transaction.prescriberLicense,
         transaction.antibiotic,
         transaction.antibioticClass,
@@ -310,6 +334,7 @@ class PostgresDatabase {
         id,
         timestamp,
         patient_id AS "patientId",
+        hospital_name AS "hospitalName",
         prescriber_license AS "prescriberLicense",
         antibiotic,
         antibiotic_class AS "antibioticClass",
@@ -422,12 +447,21 @@ class JsonFileDatabase {
       });
 
       if (!seed) {
+        if (!prescription.hospitalName) {
+          changed = true;
+          return {
+            ...prescription,
+            hospitalName: 'Unknown Hospital / Clinic'
+          };
+        }
+
         return prescription;
       }
 
       const merged = {
         ...seed,
         ...prescription,
+        hospitalName: prescription.hospitalName || seed.hospitalName,
         antibioticClass: prescription.antibioticClass || seed.antibioticClass,
         dosage: prescription.dosage || seed.dosage,
         treatmentDurationDays: prescription.treatmentDurationDays || seed.treatmentDurationDays
@@ -435,6 +469,7 @@ class JsonFileDatabase {
 
       if (
         merged.antibioticClass !== prescription.antibioticClass ||
+        merged.hospitalName !== prescription.hospitalName ||
         merged.dosage !== prescription.dosage ||
         merged.treatmentDurationDays !== prescription.treatmentDurationDays
       ) {
@@ -455,6 +490,7 @@ class JsonFileDatabase {
     const existingIndex = this.state.validPrescriptions.findIndex((item) => {
       return (
         item.patientId === prescription.patientId &&
+        item.hospitalName === prescription.hospitalName &&
         item.prescriberLicense === prescription.prescriberLicense &&
         normalizeMedicine(item.antibioticName) === normalizeMedicine(prescription.antibioticName)
       );
@@ -473,13 +509,14 @@ class JsonFileDatabase {
     return clone(existingIndex >= 0 ? this.state.validPrescriptions[existingIndex] : prescription);
   }
 
-  async findValidPrescription({ patientId, prescriberLicense, antibioticName }) {
+  async findValidPrescription({ patientId, hospitalName, prescriberLicense, antibioticName }) {
     const today = new Date().toISOString().slice(0, 10);
 
     return (
       this.state.validPrescriptions.find((prescription) => {
         return (
           prescription.patientId === patientId &&
+          normalizeText(prescription.hospitalName).toLowerCase() === normalizeText(hospitalName).toLowerCase() &&
           prescription.prescriberLicense === prescriberLicense &&
           normalizeMedicine(prescription.antibioticName) === normalizeMedicine(antibioticName) &&
           prescription.expiryDate >= today
@@ -493,6 +530,7 @@ class JsonFileDatabase {
       id: this.state.counters.transactions,
       timestamp: new Date().toISOString(),
       patientId: transaction.patientId,
+      hospitalName: transaction.hospitalName,
       prescriberLicense: transaction.prescriberLicense,
       antibiotic: transaction.antibiotic,
       antibioticClass: transaction.antibioticClass,

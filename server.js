@@ -186,6 +186,7 @@ async function searchMedicines(db, query) {
 
 function evaluateRequiredFields({
   patientId,
+  hospitalName,
   prescriberLicense,
   antibiotic,
   antibioticClass,
@@ -195,6 +196,7 @@ function evaluateRequiredFields({
 }) {
   if (
     !patientId ||
+    !hospitalName ||
     !prescriberLicense ||
     !antibiotic ||
     !antibioticClass ||
@@ -218,6 +220,7 @@ function evaluateRequiredFields({
 
 async function evaluateTransaction(db, payload) {
   const patientId = normalizeInput(payload.patientId);
+  const hospitalName = normalizeInput(payload.hospitalName);
   const prescriberLicense = normalizeInput(payload.prescriberLicense);
   const antibiotic = normalizeInput(payload.antibiotic);
   const antibioticClass = normalizeInput(payload.antibioticClass);
@@ -227,6 +230,7 @@ async function evaluateTransaction(db, payload) {
 
   const missingReason = evaluateRequiredFields({
     patientId,
+    hospitalName,
     prescriberLicense,
     antibiotic,
     antibioticClass,
@@ -238,6 +242,7 @@ async function evaluateTransaction(db, payload) {
   if (missingReason) {
     return {
       patientId,
+      hospitalName,
       prescriberLicense,
       antibiotic,
       antibioticClass,
@@ -251,6 +256,7 @@ async function evaluateTransaction(db, payload) {
 
   const prescription = await db.findValidPrescription({
     patientId,
+    hospitalName,
     prescriberLicense,
     antibioticName: antibiotic
   });
@@ -258,6 +264,7 @@ async function evaluateTransaction(db, payload) {
   if (!prescription) {
     return {
       patientId,
+      hospitalName,
       prescriberLicense,
       antibiotic,
       antibioticClass,
@@ -272,6 +279,7 @@ async function evaluateTransaction(db, payload) {
   if (prescription.antibioticClass.toLowerCase() !== antibioticClass.toLowerCase()) {
     return {
       patientId,
+      hospitalName,
       prescriberLicense,
       antibiotic,
       antibioticClass,
@@ -286,6 +294,7 @@ async function evaluateTransaction(db, payload) {
   if (prescription.dosage.toLowerCase() !== dosage.toLowerCase()) {
     return {
       patientId,
+      hospitalName,
       prescriberLicense,
       antibiotic,
       antibioticClass,
@@ -300,6 +309,7 @@ async function evaluateTransaction(db, payload) {
   if (quantity > prescription.quantityLimit) {
     return {
       patientId,
+      hospitalName,
       prescriberLicense,
       antibiotic,
       antibioticClass,
@@ -314,6 +324,7 @@ async function evaluateTransaction(db, payload) {
   if (treatmentDurationDays > prescription.treatmentDurationDays) {
     return {
       patientId,
+      hospitalName,
       prescriberLicense,
       antibiotic,
       antibioticClass,
@@ -327,6 +338,7 @@ async function evaluateTransaction(db, payload) {
 
   return {
     patientId,
+    hospitalName,
     prescriberLicense,
     antibiotic,
     antibioticClass,
@@ -340,6 +352,7 @@ async function evaluateTransaction(db, payload) {
 
 function validatePrescriptionPayload(payload) {
   const patientId = normalizeInput(payload.patientId);
+  const hospitalName = normalizeInput(payload.hospitalName);
   const prescriberLicense = normalizeInput(payload.prescriberLicense);
   const antibioticName = normalizeInput(payload.antibioticName ?? payload.antibiotic);
   const antibioticClass = normalizeInput(payload.antibioticClass);
@@ -350,6 +363,7 @@ function validatePrescriptionPayload(payload) {
 
   if (
     !patientId ||
+    !hospitalName ||
     !prescriberLicense ||
     !antibioticName ||
     !antibioticClass ||
@@ -384,6 +398,7 @@ function validatePrescriptionPayload(payload) {
   return {
     prescription: {
       patientId,
+      hospitalName,
       prescriberLicense,
       antibioticName,
       antibioticClass,

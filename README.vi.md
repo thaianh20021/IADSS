@@ -23,17 +23,18 @@ Mở `http://localhost:3000`.
 
 Các đơn thuốc seed hữu ích:
 
-| Patient ID | Prescriber License | Thuốc | Quantity Limit |
-| --- | --- | --- | --- |
-| 12345 | 98765 | Amoxicillin, Penicillin, 500mg, 5 days | 20 |
-| 24680 | 13579 | Azithromycin, Macrolide, 250mg, 3 days | 6 |
-| 11223 | 44556 | Cephalexin, Cephalosporin, 500mg, 7 days | 28 |
+| Patient ID | Bệnh viện / Phòng khám | Prescriber License | Thuốc | Quantity Limit |
+| --- | --- | --- | --- | --- |
+| 12345 | National General Hospital | 98765 | Amoxicillin, Penicillin, 500mg, 5 days | 20 |
+| 24680 | City Children Hospital | 13579 | Azithromycin, Macrolide, 250mg, 3 days | 6 |
+| 11223 | District Medical Center | 44556 | Cephalexin, Cephalosporin, 500mg, 7 days | 28 |
 
 ## Checklist test local
 
 1. Mở tab **Pharmacy POS**.
 2. Gửi giao dịch hợp lệ:
    - Patient ID: `12345`
+   - Hospital / Clinic: `National General Hospital`
    - Prescriber License Number: `98765`
    - Antibiotic Name: `Amoxicillin`
    - Antibiotic Class: `Penicillin`
@@ -43,6 +44,7 @@ Các đơn thuốc seed hữu ích:
 3. Xác nhận hiện thông báo xanh: `Transaction Approved. Data synced to MOH.`
 4. Gửi giao dịch không hợp lệ:
    - Patient ID: `00000`
+   - Hospital / Clinic: `National General Hospital`
    - Prescriber License Number: `98765`
    - Antibiotic Name: `Amoxicillin`
    - Antibiotic Class: `Penicillin`
@@ -60,7 +62,7 @@ Có thể chạy smoke test tự động:
 npm run smoke
 ```
 
-Smoke test kiểm tra health, seed prescriptions, doctor-created prescription, giao dịch Approved, giao dịch Blocked, transaction history, misuse rate và medicine lookup.
+Smoke test kiểm tra health, seed prescriptions, doctor-created prescription, giao dịch Approved, giao dịch Blocked, transaction history, misuse rate 33% và medicine lookup.
 
 ## Deploy lên Render
 

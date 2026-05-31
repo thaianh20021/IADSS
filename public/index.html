@@ -47,6 +47,11 @@
           </label>
 
           <label>
+            <span>Hospital / Clinic Visited</span>
+            <input id="hospitalName" name="hospitalName" type="text" placeholder="National General Hospital" autocomplete="off" required>
+          </label>
+
+          <label>
             <span>Prescriber License Number</span>
             <input id="prescriberLicense" name="prescriberLicense" type="text" autocomplete="off" required>
           </label>
@@ -121,6 +126,11 @@
           </label>
 
           <label>
+            <span>Hospital / Clinic</span>
+            <input name="hospitalName" type="text" placeholder="National General Hospital" autocomplete="off" required>
+          </label>
+
+          <label>
             <span>Prescriber License Number</span>
             <input name="prescriberLicense" type="text" autocomplete="off" required>
           </label>
@@ -181,6 +191,7 @@
             <thead>
               <tr>
                 <th>Patient ID</th>
+                <th>Hospital / Clinic</th>
                 <th>Prescriber</th>
                 <th>Antibiotic</th>
                 <th>Class</th>
@@ -191,7 +202,7 @@
             </thead>
             <tbody id="prescriptionRows">
               <tr>
-                <td colspan="7" class="empty-cell">Loading prescriptions...</td>
+                <td colspan="8" class="empty-cell">Loading prescriptions...</td>
               </tr>
             </tbody>
           </table>
@@ -229,6 +240,7 @@
               <tr>
                 <th>Timestamp</th>
                 <th>Patient ID</th>
+                <th>Hospital / Clinic</th>
                 <th>Antibiotic</th>
                 <th>Class</th>
                 <th>Dosage</th>
@@ -238,7 +250,7 @@
             </thead>
             <tbody id="transactionRows">
               <tr>
-                <td colspan="4" class="empty-cell">No transactions recorded.</td>
+                <td colspan="8" class="empty-cell">No transactions recorded.</td>
               </tr>
             </tbody>
           </table>
@@ -269,6 +281,7 @@
             <h3>Example Request</h3>
             <pre><code>{
   "patientId": "12345",
+  "hospitalName": "National General Hospital",
   "prescriberLicense": "98765",
   "antibiotic": "Amoxicillin",
   "antibioticClass": "Penicillin",
@@ -293,7 +306,7 @@
             <h3>Decision Logic</h3>
             <ul>
               <li>Missing required data is blocked.</li>
-              <li>Patient ID and prescriber license must match a valid prescription.</li>
+              <li>Patient ID, hospital or clinic, and prescriber license must match a valid prescription.</li>
               <li>Antibiotic class, dosage, quantity, and treatment duration must match prescription limits.</li>
               <li>Every Approved and Blocked attempt is logged for the MOH Dashboard.</li>
             </ul>

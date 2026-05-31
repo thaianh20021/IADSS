@@ -42,6 +42,7 @@ async function main() {
     prescriptions.prescriptions.some((item) => {
       return (
         item.patientId === '12345' &&
+        item.hospitalName === 'National General Hospital' &&
         item.prescriberLicense === '98765' &&
         item.antibioticName === 'Amoxicillin'
       );
@@ -57,6 +58,7 @@ async function main() {
     method: 'POST',
     body: JSON.stringify({
       patientId: '88888',
+      hospitalName: 'Smoke Test Hospital',
       prescriberLicense: 'DOC-SMOKE',
       antibioticName: 'Cefixime',
       antibioticClass: 'Cephalosporin',
@@ -73,6 +75,7 @@ async function main() {
     method: 'POST',
     body: JSON.stringify({
       patientId: '88888',
+      hospitalName: 'Smoke Test Hospital',
       prescriberLicense: 'DOC-SMOKE',
       antibiotic: 'Cefixime',
       antibioticClass: 'Cephalosporin',
@@ -88,6 +91,7 @@ async function main() {
     method: 'POST',
     body: JSON.stringify({
       patientId: '12345',
+      hospitalName: 'National General Hospital',
       prescriberLicense: '98765',
       antibiotic: 'Amoxicillin',
       antibioticClass: 'Penicillin',
@@ -103,6 +107,7 @@ async function main() {
     method: 'POST',
     body: JSON.stringify({
       patientId: '00000',
+      hospitalName: 'National General Hospital',
       prescriberLicense: '98765',
       antibiotic: 'Amoxicillin',
       antibioticClass: 'Penicillin',

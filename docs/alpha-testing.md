@@ -16,6 +16,7 @@ Mở app IADSS tại đây:
 
 Kịch bản 1: Thử bán Amoxicillin với thông tin không hợp lệ
 - Patient ID: 00000
+- Hospital / Clinic: National General Hospital
 - Prescriber License Number: 98765
 - Antibiotic Name: Amoxicillin
 - Antibiotic Class: Penicillin
@@ -27,6 +28,7 @@ Kỳ vọng: hệ thống phải hiện cảnh báo đỏ và chặn giao dịch
 
 Kịch bản 2: Thử bán Amoxicillin với thông tin hợp lệ
 - Patient ID: 12345
+- Hospital / Clinic: National General Hospital
 - Prescriber License Number: 98765
 - Antibiotic Name: Amoxicillin
 - Antibiotic Class: Penicillin
@@ -57,6 +59,7 @@ Use this to show the hospital-to-pharmacy flow:
 1. Open the Hospital / Doctor Portal tab.
 2. Create a new prescription:
    Patient ID: 77777
+   Hospital / Clinic: University Medical Center
    Prescriber License Number: DOC-2026
    Antibiotic Name: Cefixime
    Antibiotic Class: Cephalosporin

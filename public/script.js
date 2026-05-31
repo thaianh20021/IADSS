@@ -151,7 +151,7 @@ async function checkHealth() {
 async function loadTransactions() {
   rows.innerHTML = `
     <tr>
-      <td colspan="7" class="empty-cell">Loading transactions...</td>
+      <td colspan="8" class="empty-cell">Loading transactions...</td>
     </tr>
   `;
 
@@ -169,7 +169,7 @@ async function loadTransactions() {
     if (transactions.length === 0) {
       rows.innerHTML = `
         <tr>
-          <td colspan="7" class="empty-cell">No transactions recorded.</td>
+          <td colspan="8" class="empty-cell">No transactions recorded.</td>
         </tr>
       `;
       return;
@@ -184,6 +184,7 @@ async function loadTransactions() {
           <tr class="${isBlocked ? 'blocked-row' : ''}">
             <td>${escapeHtml(formatTimestamp(transaction.timestamp))}</td>
             <td>${escapeHtml(transaction.patientId || 'N/A')}</td>
+            <td>${escapeHtml(transaction.hospitalName || 'N/A')}</td>
             <td>${escapeHtml(transaction.antibiotic || 'N/A')}</td>
             <td>${escapeHtml(transaction.antibioticClass || 'N/A')}</td>
             <td>${escapeHtml(transaction.dosage || 'N/A')}</td>
@@ -197,7 +198,7 @@ async function loadTransactions() {
     updateMetrics([]);
     rows.innerHTML = `
       <tr>
-        <td colspan="7" class="empty-cell">Unable to load transactions.</td>
+        <td colspan="8" class="empty-cell">Unable to load transactions.</td>
       </tr>
     `;
   }
@@ -206,7 +207,7 @@ async function loadTransactions() {
 async function loadPrescriptions() {
   prescriptionRows.innerHTML = `
     <tr>
-      <td colspan="7" class="empty-cell">Loading prescriptions...</td>
+      <td colspan="8" class="empty-cell">Loading prescriptions...</td>
     </tr>
   `;
 
@@ -223,7 +224,7 @@ async function loadPrescriptions() {
     if (prescriptions.length === 0) {
       prescriptionRows.innerHTML = `
         <tr>
-          <td colspan="7" class="empty-cell">No prescriptions saved.</td>
+          <td colspan="8" class="empty-cell">No prescriptions saved.</td>
         </tr>
       `;
       return;
@@ -234,6 +235,7 @@ async function loadPrescriptions() {
         return `
           <tr>
             <td>${escapeHtml(prescription.patientId)}</td>
+            <td>${escapeHtml(prescription.hospitalName)}</td>
             <td>${escapeHtml(prescription.prescriberLicense)}</td>
             <td>${escapeHtml(prescription.antibioticName)}</td>
             <td>${escapeHtml(prescription.antibioticClass)}</td>
@@ -247,7 +249,7 @@ async function loadPrescriptions() {
   } catch (error) {
     prescriptionRows.innerHTML = `
       <tr>
-        <td colspan="7" class="empty-cell">Unable to load prescriptions.</td>
+        <td colspan="8" class="empty-cell">Unable to load prescriptions.</td>
       </tr>
     `;
   }
@@ -321,6 +323,7 @@ form.addEventListener('submit', async (event) => {
   const formData = new FormData(form);
   const payload = {
     patientId: formData.get('patientId'),
+    hospitalName: formData.get('hospitalName'),
     prescriberLicense: formData.get('prescriberLicense'),
     antibiotic: formData.get('antibiotic'),
     antibioticClass: formData.get('antibioticClass'),
@@ -367,6 +370,7 @@ prescriptionForm.addEventListener('submit', async (event) => {
   const formData = new FormData(prescriptionForm);
   const payload = {
     patientId: formData.get('patientId'),
+    hospitalName: formData.get('hospitalName'),
     prescriberLicense: formData.get('prescriberLicense'),
     antibioticName: formData.get('antibioticName'),
     antibioticClass: formData.get('antibioticClass'),

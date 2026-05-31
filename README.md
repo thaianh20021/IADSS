@@ -25,17 +25,18 @@ Open `http://localhost:3000`.
 
 Useful seeded valid prescriptions:
 
-| Patient ID | Prescriber License | Antibiotic | Quantity Limit |
-| --- | --- | --- | --- |
-| 12345 | 98765 | Amoxicillin, Penicillin, 500mg, 5 days | 20 |
-| 24680 | 13579 | Azithromycin, Macrolide, 250mg, 3 days | 6 |
-| 11223 | 44556 | Cephalexin, Cephalosporin, 500mg, 7 days | 28 |
+| Patient ID | Hospital / Clinic | Prescriber License | Antibiotic | Quantity Limit |
+| --- | --- | --- | --- | --- |
+| 12345 | National General Hospital | 98765 | Amoxicillin, Penicillin, 500mg, 5 days | 20 |
+| 24680 | City Children Hospital | 13579 | Azithromycin, Macrolide, 250mg, 3 days | 6 |
+| 11223 | District Medical Center | 44556 | Cephalexin, Cephalosporin, 500mg, 7 days | 28 |
 
 ## Local Test Checklist
 
 1. Open the Pharmacy POS tab.
 2. Submit a valid transaction:
    - Patient ID: `12345`
+   - Hospital / Clinic: `National General Hospital`
    - Prescriber License Number: `98765`
    - Antibiotic Name: `Amoxicillin`
    - Antibiotic Class: `Penicillin`
@@ -45,6 +46,7 @@ Useful seeded valid prescriptions:
 3. Confirm the green message appears: `Transaction Approved. Data synced to MOH.`
 4. Submit an invalid transaction:
    - Patient ID: `00000`
+   - Hospital / Clinic: `National General Hospital`
    - Prescriber License Number: `98765`
    - Antibiotic Name: `Amoxicillin`
    - Antibiotic Class: `Penicillin`
@@ -62,7 +64,7 @@ You can also run the automated smoke test:
 npm run smoke
 ```
 
-The smoke test verifies health, seed prescriptions, one approved transaction, one blocked transaction, transaction history, a 50% misuse rate, and medicine lookup.
+The smoke test verifies health, seed prescriptions, a doctor-created prescription, approved transactions, a blocked transaction, transaction history, a 33% misuse rate, and medicine lookup.
 
 ## Render Deployment
 
@@ -105,6 +107,7 @@ You are a pharmacist testing an antibiotic surveillance MVP.
 
 1. Try selling Amoxicillin with fake prescription details:
    Patient ID: 00000
+   Hospital / Clinic: National General Hospital
    Prescriber License Number: 98765
    Antibiotic Class: Penicillin
    Dosage: 500mg
@@ -113,6 +116,7 @@ You are a pharmacist testing an antibiotic surveillance MVP.
 
 2. Then try selling Amoxicillin with valid prescription details:
    Patient ID: 12345
+   Hospital / Clinic: National General Hospital
    Prescriber License Number: 98765
    Antibiotic Class: Penicillin
    Dosage: 500mg
