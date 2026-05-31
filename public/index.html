@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IADSS</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">+</div>
+        <div>
+          <h1>IADSS</h1>
+          <p>Integrated Antibiotic Dispensing Surveillance System</p>
+        </div>
+      </div>
+      <div class="system-status" id="systemStatus">Checking system</div>
+    </header>
+
+    <nav class="tab-bar" aria-label="Primary views">
+      <button class="tab-button active" type="button" data-tab="posPanel">
+        Pharmacy POS
+      </button>
+      <button class="tab-button" type="button" data-tab="doctorPanel">
+        Hospital / Doctor Portal
+      </button>
+      <button class="tab-button" type="button" data-tab="dashboardPanel">
+        MOH Dashboard
+      </button>
+      <button class="tab-button" type="button" data-tab="apiDocsPanel">
+        POS API Docs
+      </button>
+    </nav>
+
+    <main class="app-shell">
+      <section class="tab-panel active" id="posPanel">
+        <div class="panel-heading">
+          <h2>Pharmacy POS</h2>
+          <span class="panel-chip">Live validation</span>
+        </div>
+
+        <form class="transaction-form" id="transactionForm">
+          <label>
+            <span>Patient ID</span>
+            <input id="patientId" name="patientId" type="text" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>Prescriber License Number</span>
+            <input id="prescriberLicense" name="prescriberLicense" type="text" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>Antibiotic Name</span>
+            <div class="medicine-field">
+              <input
+                id="antibiotic"
+                name="antibiotic"
+                type="text"
+                list="medicineOptions"
+                autocomplete="off"
+                aria-controls="medicineSuggestions"
+                aria-expanded="false"
+                required
+              >
+              <div class="medicine-suggestions" id="medicineSuggestions" role="listbox"></div>
+            </div>
+            <datalist id="medicineOptions"></datalist>
+          </label>
+
+          <label>
+            <span>Antibiotic Class</span>
+            <select id="antibioticClass" name="antibioticClass" required>
+              <option value="">Select class</option>
+              <option value="Penicillin">Penicillin</option>
+              <option value="Macrolide">Macrolide</option>
+              <option value="Cephalosporin">Cephalosporin</option>
+              <option value="Fluoroquinolone">Fluoroquinolone</option>
+              <option value="Tetracycline">Tetracycline</option>
+              <option value="Nitroimidazole">Nitroimidazole</option>
+              <option value="Lincosamide">Lincosamide</option>
+              <option value="Sulfonamide">Sulfonamide</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Dosage</span>
+            <input id="dosage" name="dosage" type="text" placeholder="500mg" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>Quantity</span>
+            <input id="quantity" name="quantity" type="number" min="1" step="1" required>
+          </label>
+
+          <label>
+            <span>Treatment Duration (days)</span>
+            <input id="treatmentDurationDays" name="treatmentDurationDays" type="number" min="1" step="1" required>
+          </label>
+
+          <div class="form-actions">
+            <button class="primary-button" type="submit">Submit Transaction</button>
+            <span class="lookup-source" id="lookupSource"></span>
+          </div>
+        </form>
+
+        <div class="alert-area" id="alertArea" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="tab-panel" id="doctorPanel">
+        <div class="panel-heading">
+          <h2>Hospital / Doctor Portal</h2>
+          <span class="panel-chip">Prescription registry</span>
+        </div>
+
+        <form class="transaction-form" id="prescriptionForm">
+          <label>
+            <span>Patient ID</span>
+            <input name="patientId" type="text" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>Prescriber License Number</span>
+            <input name="prescriberLicense" type="text" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>Antibiotic Name</span>
+            <input name="antibioticName" type="text" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>Antibiotic Class</span>
+            <select name="antibioticClass" required>
+              <option value="">Select class</option>
+              <option value="Penicillin">Penicillin</option>
+              <option value="Macrolide">Macrolide</option>
+              <option value="Cephalosporin">Cephalosporin</option>
+              <option value="Fluoroquinolone">Fluoroquinolone</option>
+              <option value="Tetracycline">Tetracycline</option>
+              <option value="Nitroimidazole">Nitroimidazole</option>
+              <option value="Lincosamide">Lincosamide</option>
+              <option value="Sulfonamide">Sulfonamide</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Dosage</span>
+            <input name="dosage" type="text" placeholder="500mg" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>Quantity Limit</span>
+            <input name="quantityLimit" type="number" min="1" step="1" required>
+          </label>
+
+          <label>
+            <span>Treatment Duration (days)</span>
+            <input name="treatmentDurationDays" type="number" min="1" step="1" required>
+          </label>
+
+          <label>
+            <span>Expiry Date</span>
+            <input name="expiryDate" type="date" required>
+          </label>
+
+          <div class="form-actions">
+            <button class="primary-button" type="submit">Save Prescription</button>
+          </div>
+        </form>
+
+        <div class="alert-area" id="prescriptionAlertArea" role="status" aria-live="polite"></div>
+
+        <div class="subsection-heading">
+          <h3>Valid Prescriptions</h3>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Patient ID</th>
+                <th>Prescriber</th>
+                <th>Antibiotic</th>
+                <th>Class</th>
+                <th>Dosage</th>
+                <th>Limit</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody id="prescriptionRows">
+              <tr>
+                <td colspan="7" class="empty-cell">Loading prescriptions...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="dashboardPanel">
+        <div class="panel-heading">
+          <h2>MOH Dashboard</h2>
+          <button class="secondary-button" id="clearDataButton" type="button">Clear Data</button>
+        </div>
+
+        <div class="metrics-grid" aria-label="MOH surveillance summary">
+          <div class="metric">
+            <span>Total Attempts</span>
+            <strong id="totalMetric">0</strong>
+          </div>
+          <div class="metric">
+            <span>Approved</span>
+            <strong id="approvedMetric">0</strong>
+          </div>
+          <div class="metric danger-metric">
+            <span>Blocked</span>
+            <strong id="blockedMetric">0</strong>
+          </div>
+          <div class="metric danger-metric">
+            <span>Misuse Rate</span>
+            <strong id="misuseRateMetric">0%</strong>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Patient ID</th>
+                <th>Antibiotic</th>
+                <th>Class</th>
+                <th>Dosage</th>
+                <th>Duration</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="transactionRows">
+              <tr>
+                <td colspan="4" class="empty-cell">No transactions recorded.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="apiDocsPanel">
+        <div class="panel-heading">
+          <h2>POS API Integration Docs</h2>
+          <span class="panel-chip">Open API</span>
+        </div>
+
+        <div class="docs-grid">
+          <section class="doc-block">
+            <h3>Real-time POS Checkpoint</h3>
+            <p>
+              Existing pharmacy POS systems can call IADSS before completing an antibiotic sale.
+              The API returns an Approved or Blocked decision and records the attempt for MOH surveillance.
+            </p>
+          </section>
+
+          <section class="doc-block">
+            <h3>Endpoint</h3>
+            <code>POST /api/transactions</code>
+          </section>
+
+          <section class="doc-block wide">
+            <h3>Example Request</h3>
+            <pre><code>{
+  "patientId": "12345",
+  "prescriberLicense": "98765",
+  "antibiotic": "Amoxicillin",
+  "antibioticClass": "Penicillin",
+  "dosage": "500mg",
+  "quantity": 10,
+  "treatmentDurationDays": 5
+}</code></pre>
+          </section>
+
+          <section class="doc-block wide">
+            <h3>Example Response</h3>
+            <pre><code>{
+  "message": "Transaction Approved. Data synced to MOH.",
+  "transaction": {
+    "status": "Approved",
+    "reason": "Prescription verified."
+  }
+}</code></pre>
+          </section>
+
+          <section class="doc-block wide">
+            <h3>Decision Logic</h3>
+            <ul>
+              <li>Missing required data is blocked.</li>
+              <li>Patient ID and prescriber license must match a valid prescription.</li>
+              <li>Antibiotic class, dosage, quantity, and treatment duration must match prescription limits.</li>
+              <li>Every Approved and Blocked attempt is logged for the MOH Dashboard.</li>
+            </ul>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="/script.js"></script>
+  </body>
+</html>
