@@ -12,6 +12,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
+const REFERENCE_CATEGORIES = new Set(['antibiotics', 'antibioticClasses']);
 
 function isFreshCache(cached) {
   if (!cached?.fetchedAt) {
@@ -44,16 +45,18 @@ function uniqueMedicineResults(results) {
     .slice(0, 12);
 }
 
-function fallbackMedicineSearch(query) {
+async function fallbackMedicineSearch(db, query) {
   const normalized = query.toLowerCase();
-  const matches = FALLBACK_ANTIBIOTICS.filter((name) => {
+  const configuredAntibiotics = await db.getReferenceList('antibiotics');
+  const antibiotics = configuredAntibiotics.length > 0 ? configuredAntibiotics : FALLBACK_ANTIBIOTICS;
+  const matches = antibiotics.filter((name) => {
     return name.toLowerCase().includes(normalized);
   });
 
-  return (matches.length > 0 ? matches : FALLBACK_ANTIBIOTICS).slice(0, 8).map((name) => ({
+  return (matches.length > 0 ? matches : antibiotics).slice(0, 8).map((name) => ({
     name,
     source: 'fallback',
-    detail: 'Seed antibiotic list'
+    detail: 'Configured antibiotic list'
   }));
 }
 
@@ -134,7 +137,7 @@ async function searchMedicines(db, query) {
   if (normalizedQuery.length < 2) {
     return {
       source: 'fallback',
-      results: fallbackMedicineSearch(normalizedQuery)
+      results: await fallbackMedicineSearch(db, normalizedQuery)
     };
   }
 
@@ -175,7 +178,7 @@ async function searchMedicines(db, query) {
     console.warn(error.message);
   }
 
-  const fallback = fallbackMedicineSearch(normalizedQuery);
+  const fallback = await fallbackMedicineSearch(db, normalizedQuery);
   await db.saveMedicineCache(normalizedQuery, 'fallback', fallback);
 
   return {
@@ -410,6 +413,14 @@ function validatePrescriptionPayload(payload) {
   };
 }
 
+function validateReferenceCategory(category) {
+  if (!REFERENCE_CATEGORIES.has(category)) {
+    return null;
+  }
+
+  return category;
+}
+
 export async function createApp(options = {}) {
   const db = options.db ?? (await createDatabase(options.database));
   const app = express();
@@ -461,6 +472,71 @@ export async function createApp(options = {}) {
       const query = normalizeInput(request.query.q);
       const result = await searchMedicines(db, query);
       response.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/reference/:category', async (request, response, next) => {
+    try {
+      const category = validateReferenceCategory(request.params.category);
+
+      if (!category) {
+        response.status(404).json({ error: 'Unknown reference category.' });
+        return;
+      }
+
+      response.json({
+        category,
+        items: await db.getReferenceList(category)
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/reference/:category', async (request, response, next) => {
+    try {
+      const category = validateReferenceCategory(request.params.category);
+      const value = normalizeInput(request.body?.value);
+
+      if (!category) {
+        response.status(404).json({ error: 'Unknown reference category.' });
+        return;
+      }
+
+      if (!value) {
+        response.status(400).json({ error: 'Reference value is required.' });
+        return;
+      }
+
+      await db.addReferenceItem(category, value);
+      await db.clearMedicineCache();
+      response.status(201).json({
+        category,
+        items: await db.getReferenceList(category)
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/reference/:category/:value', async (request, response, next) => {
+    try {
+      const category = validateReferenceCategory(request.params.category);
+      const value = normalizeInput(request.params.value);
+
+      if (!category) {
+        response.status(404).json({ error: 'Unknown reference category.' });
+        return;
+      }
+
+      await db.deleteReferenceItem(category, value);
+      await db.clearMedicineCache();
+      response.json({
+        category,
+        items: await db.getReferenceList(category)
+      });
     } catch (error) {
       next(error);
     }

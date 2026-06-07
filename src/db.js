@@ -30,7 +30,18 @@ export const FALLBACK_ANTIBIOTICS = [
   'Nitrofurantoin'
 ];
 
-export const SEED_PRESCRIPTIONS = [
+export const DEFAULT_ANTIBIOTIC_CLASSES = [
+  'Penicillin',
+  'Macrolide',
+  'Cephalosporin',
+  'Fluoroquinolone',
+  'Tetracycline',
+  'Nitroimidazole',
+  'Lincosamide',
+  'Sulfonamide'
+];
+
+const LEGACY_DEMO_PRESCRIPTIONS = [
   {
     patientId: '12345',
     hospitalName: 'National General Hospital',
@@ -66,6 +77,20 @@ export const SEED_PRESCRIPTIONS = [
   }
 ];
 
+const LEGACY_DEMO_PRESCRIPTION_KEYS = [
+  ...LEGACY_DEMO_PRESCRIPTIONS,
+  {
+    patientId: '77777',
+    prescriberLicense: 'DOC-2026',
+    antibioticName: 'Cefixime'
+  },
+  {
+    patientId: '88888',
+    prescriberLicense: 'DOC-SMOKE',
+    antibioticName: 'Cefixime'
+  }
+];
+
 function normalizeText(value) {
   return String(value ?? '').trim();
 }
@@ -76,6 +101,10 @@ function normalizeMedicine(value) {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values.map(normalizeText).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
 function createPostgresPool(databaseUrl) {
@@ -148,40 +177,50 @@ class PostgresDatabase {
       );
     `);
 
-    for (const prescription of SEED_PRESCRIPTIONS) {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS reference_items (
+        category TEXT NOT NULL,
+        value TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (category, value)
+      );
+    `);
+
+    await this.removeLegacyDemoPrescriptions();
+
+    await this.seedReferenceItems('antibiotics', FALLBACK_ANTIBIOTICS);
+    await this.seedReferenceItems('antibioticClasses', DEFAULT_ANTIBIOTIC_CLASSES);
+  }
+
+  async removeLegacyDemoPrescriptions() {
+    for (const prescription of LEGACY_DEMO_PRESCRIPTION_KEYS) {
       await this.pool.query(
         `
-          INSERT INTO valid_prescriptions (
-            patient_id,
-            hospital_name,
-            prescriber_license,
-            antibiotic_name,
-            antibiotic_class,
-            dosage,
-            quantity_limit,
-            treatment_duration_days,
-            expiry_date
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-          ON CONFLICT (patient_id, prescriber_license, antibiotic_name)
-          DO UPDATE SET
-            hospital_name = COALESCE(NULLIF(valid_prescriptions.hospital_name, ''), EXCLUDED.hospital_name),
-            antibiotic_class = COALESCE(NULLIF(valid_prescriptions.antibiotic_class, ''), EXCLUDED.antibiotic_class),
-            dosage = COALESCE(NULLIF(valid_prescriptions.dosage, ''), EXCLUDED.dosage),
-            treatment_duration_days = GREATEST(valid_prescriptions.treatment_duration_days, EXCLUDED.treatment_duration_days);
+          DELETE FROM valid_prescriptions
+          WHERE patient_id = $1
+            AND prescriber_license = $2
+            AND LOWER(antibiotic_name) = LOWER($3);
         `,
         [
           prescription.patientId,
-          prescription.hospitalName,
           prescription.prescriberLicense,
-          prescription.antibioticName,
-          prescription.antibioticClass,
-          prescription.dosage,
-          prescription.quantityLimit,
-          prescription.treatmentDurationDays,
-          prescription.expiryDate
+          prescription.antibioticName
         ]
       );
+    }
+  }
+
+  async seedReferenceItems(category, values) {
+    const result = await this.pool.query('SELECT COUNT(*)::int AS count FROM reference_items WHERE category = $1;', [
+      category
+    ]);
+
+    if (result.rows[0].count > 0) {
+      return;
+    }
+
+    for (const value of values) {
+      await this.addReferenceItem(category, value);
     }
   }
 
@@ -354,6 +393,41 @@ class PostgresDatabase {
     await this.pool.query('DELETE FROM transactions;');
   }
 
+  async getReferenceList(category) {
+    const result = await this.pool.query(
+      'SELECT value FROM reference_items WHERE category = $1 ORDER BY value;',
+      [category]
+    );
+
+    return result.rows.map((row) => row.value);
+  }
+
+  async addReferenceItem(category, value) {
+    const normalizedValue = normalizeText(value);
+
+    if (!normalizedValue) {
+      throw new Error('Reference value is required.');
+    }
+
+    await this.pool.query(
+      `
+        INSERT INTO reference_items (category, value)
+        VALUES ($1, $2)
+        ON CONFLICT (category, value) DO NOTHING;
+      `,
+      [category, normalizedValue]
+    );
+
+    return normalizedValue;
+  }
+
+  async deleteReferenceItem(category, value) {
+    await this.pool.query('DELETE FROM reference_items WHERE category = $1 AND value = $2;', [
+      category,
+      normalizeText(value)
+    ]);
+  }
+
   async getMedicineCache(query) {
     const result = await this.pool.query(
       `
@@ -383,6 +457,10 @@ class PostgresDatabase {
     );
   }
 
+  async clearMedicineCache() {
+    await this.pool.query('DELETE FROM medicine_cache;');
+  }
+
   async close() {
     await this.pool.end();
   }
@@ -409,21 +487,33 @@ class JsonFileDatabase {
       await this.persist();
     }
 
-    if (!Array.isArray(this.state.validPrescriptions) || this.state.validPrescriptions.length === 0) {
-      this.state.validPrescriptions = clone(SEED_PRESCRIPTIONS);
+    if (!Array.isArray(this.state.validPrescriptions)) {
+      this.state.validPrescriptions = [];
       await this.persist();
     }
 
     if (this.migrateSeedPrescriptionFields()) {
       await this.persist();
     }
+
+    if (this.removeLegacyDemoPrescriptions()) {
+      await this.persist();
+    }
+
+    if (this.migrateReferenceLists()) {
+      await this.persist();
+    }
   }
 
   createEmptyState() {
     return {
-      validPrescriptions: clone(SEED_PRESCRIPTIONS),
+      validPrescriptions: [],
       transactions: [],
       medicineCache: {},
+      referenceLists: {
+        antibiotics: uniqueSorted(FALLBACK_ANTIBIOTICS),
+        antibioticClasses: uniqueSorted(DEFAULT_ANTIBIOTIC_CLASSES)
+      },
       counters: {
         transactions: 1
       }
@@ -438,7 +528,7 @@ class JsonFileDatabase {
     let changed = false;
 
     this.state.validPrescriptions = this.state.validPrescriptions.map((prescription) => {
-      const seed = SEED_PRESCRIPTIONS.find((item) => {
+      const seed = LEGACY_DEMO_PRESCRIPTIONS.find((item) => {
         return (
           item.patientId === prescription.patientId &&
           item.prescriberLicense === prescription.prescriberLicense &&
@@ -478,6 +568,56 @@ class JsonFileDatabase {
 
       return merged;
     });
+
+    return changed;
+  }
+
+  removeLegacyDemoPrescriptions() {
+    const before = this.state.validPrescriptions.length;
+
+    this.state.validPrescriptions = this.state.validPrescriptions.filter((prescription) => {
+      return !LEGACY_DEMO_PRESCRIPTION_KEYS.some((demo) => {
+        return (
+          prescription.patientId === demo.patientId &&
+          prescription.prescriberLicense === demo.prescriberLicense &&
+          normalizeMedicine(prescription.antibioticName) === normalizeMedicine(demo.antibioticName)
+        );
+      });
+    });
+
+    return this.state.validPrescriptions.length !== before;
+  }
+
+  migrateReferenceLists() {
+    let changed = false;
+
+    if (!this.state.referenceLists || typeof this.state.referenceLists !== 'object') {
+      this.state.referenceLists = {};
+      changed = true;
+    }
+
+    if (!Array.isArray(this.state.referenceLists.antibiotics)) {
+      this.state.referenceLists.antibiotics = uniqueSorted(FALLBACK_ANTIBIOTICS);
+      changed = true;
+    }
+
+    if (!Array.isArray(this.state.referenceLists.antibioticClasses)) {
+      this.state.referenceLists.antibioticClasses = uniqueSorted(DEFAULT_ANTIBIOTIC_CLASSES);
+      changed = true;
+    }
+
+    const normalizedAntibiotics = uniqueSorted(this.state.referenceLists.antibiotics);
+    const normalizedClasses = uniqueSorted(this.state.referenceLists.antibioticClasses);
+
+    if (JSON.stringify(normalizedAntibiotics) !== JSON.stringify(this.state.referenceLists.antibiotics)) {
+      this.state.referenceLists.antibiotics = normalizedAntibiotics;
+      changed = true;
+    }
+
+    if (JSON.stringify(normalizedClasses) !== JSON.stringify(this.state.referenceLists.antibioticClasses)) {
+      this.state.referenceLists.antibioticClasses = normalizedClasses;
+      changed = true;
+    }
 
     return changed;
   }
@@ -559,6 +699,38 @@ class JsonFileDatabase {
     await this.persist();
   }
 
+  async getReferenceList(category) {
+    return clone(this.state.referenceLists?.[category] ?? []);
+  }
+
+  async addReferenceItem(category, value) {
+    const normalizedValue = normalizeText(value);
+
+    if (!normalizedValue) {
+      throw new Error('Reference value is required.');
+    }
+
+    if (!this.state.referenceLists[category]) {
+      this.state.referenceLists[category] = [];
+    }
+
+    this.state.referenceLists[category] = uniqueSorted([...this.state.referenceLists[category], normalizedValue]);
+    await this.persist();
+
+    return normalizedValue;
+  }
+
+  async deleteReferenceItem(category, value) {
+    const normalizedValue = normalizeText(value);
+
+    if (!this.state.referenceLists[category]) {
+      return;
+    }
+
+    this.state.referenceLists[category] = this.state.referenceLists[category].filter((item) => item !== normalizedValue);
+    await this.persist();
+  }
+
   async getMedicineCache(query) {
     const cached = this.state.medicineCache[query];
 
@@ -576,6 +748,11 @@ class JsonFileDatabase {
       fetchedAt: new Date().toISOString()
     };
 
+    await this.persist();
+  }
+
+  async clearMedicineCache() {
+    this.state.medicineCache = {};
     await this.persist();
   }
 

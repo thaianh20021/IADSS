@@ -37,19 +37,11 @@ async function main() {
   assert(health.ok === true, 'Health check did not return ok=true.');
   console.log('OK health check');
 
-  const prescriptions = await request('/api/prescriptions');
-  assert(
-    prescriptions.prescriptions.some((item) => {
-      return (
-        item.patientId === '12345' &&
-        item.hospitalName === 'National General Hospital' &&
-        item.prescriberLicense === '98765' &&
-        item.antibioticName === 'Amoxicillin'
-      );
-    }),
-    'Seed prescription for Amoxicillin was not found.'
-  );
-  console.log('OK seed prescription exists');
+  const antibiotics = await request('/api/reference/antibiotics');
+  assert(antibiotics.items.includes('Amoxicillin'), 'Antibiotic reference list is missing Amoxicillin.');
+  const antibioticClasses = await request('/api/reference/antibioticClasses');
+  assert(antibioticClasses.items.includes('Penicillin'), 'Antibiotic class reference list is missing Penicillin.');
+  console.log('OK reference lists loaded');
 
   await request('/api/transactions', { method: 'DELETE' });
   console.log('OK cleared previous transactions');
@@ -86,6 +78,23 @@ async function main() {
   });
   assert(doctorApproved.transaction.status === 'Approved', 'Doctor-created prescription was not approved by POS.');
   console.log('OK doctor-created prescription verified by POS');
+
+  const amoxicillinPrescription = await request('/api/prescriptions', {
+    method: 'POST',
+    body: JSON.stringify({
+      patientId: '12345',
+      hospitalName: 'National General Hospital',
+      prescriberLicense: '98765',
+      antibioticName: 'Amoxicillin',
+      antibioticClass: 'Penicillin',
+      dosage: '500mg',
+      quantityLimit: 20,
+      treatmentDurationDays: 5,
+      expiryDate: '2027-12-31'
+    })
+  });
+  assert(amoxicillinPrescription.prescription.patientId === '12345', 'Amoxicillin prescription was not saved.');
+  console.log('OK Amoxicillin prescription saved');
 
   const approved = await request('/api/transactions', {
     method: 'POST',

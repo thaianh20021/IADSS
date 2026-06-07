@@ -12,6 +12,19 @@ Bạn đang đóng vai dược sĩ trong một nhà thuốc.
 Mở app IADSS tại đây:
 [Dán public URL vào đây]
 
+Kịch bản 0: Tạo đơn thuốc trước
+1. Mở tab Hospital / Doctor Portal.
+2. Nhập đơn thuốc:
+   Patient ID: 12345
+   Hospital / Clinic: National General Hospital
+   Prescriber License Number: 98765
+   Antibiotic Name: Amoxicillin
+   Antibiotic Class: Penicillin
+   Dosage: 500mg
+   Quantity Limit: 20
+   Treatment Duration: 5
+   Expiry Date: chọn ngày trong tương lai
+
 Kịch bản 1: Thử bán Amoxicillin với thông tin không hợp lệ
 - Patient ID: 00000
 - Hospital / Clinic: National General Hospital
@@ -51,7 +64,7 @@ Gửi feedback cho mình:
 
 ## Kịch bản Doctor Portal
 
-Dùng kịch bản này để demo flow bệnh viện/bác sĩ tạo đơn thuốc trước, nhà thuốc kiểm tra sau:
+Dùng kịch bản này để kiểm tra flow bệnh viện/bác sĩ tạo đơn thuốc trước, nhà thuốc kiểm tra sau:
 
 ```text
 1. Mở tab Hospital / Doctor Portal.
@@ -94,7 +107,7 @@ Alpha test được xem là pass khi:
 ## Giới hạn của MVP
 
 - Đây chưa phải hệ thống xác minh y tế thật.
-- Đơn thuốc seed và đơn thuốc nhập từ Doctor Portal chỉ là dữ liệu demo.
-- Medicine lookup dùng API công khai và fallback seed data, không dùng private API của Long Châu.
+- POS chỉ approve khi đơn thuốc đã được nhập từ Hospital / Doctor Portal.
+- Medicine lookup dùng API công khai và danh sách fallback trong Settings, không dùng private API của Long Châu.
 - Chưa có authentication.
 - MOH sync được mô phỏng bằng cách lưu records vào backend database.

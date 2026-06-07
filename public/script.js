@@ -2,6 +2,7 @@ const form = document.querySelector('#transactionForm');
 const prescriptionForm = document.querySelector('#prescriptionForm');
 const alertArea = document.querySelector('#alertArea');
 const prescriptionAlertArea = document.querySelector('#prescriptionAlertArea');
+const settingsAlertArea = document.querySelector('#settingsAlertArea');
 const rows = document.querySelector('#transactionRows');
 const prescriptionRows = document.querySelector('#prescriptionRows');
 const clearDataButton = document.querySelector('#clearDataButton');
@@ -16,14 +17,19 @@ const totalMetric = document.querySelector('#totalMetric');
 const approvedMetric = document.querySelector('#approvedMetric');
 const blockedMetric = document.querySelector('#blockedMetric');
 const misuseRateMetric = document.querySelector('#misuseRateMetric');
-const fillValidTransactionButton = document.querySelector('#fillValidTransaction');
-const fillBlockedTransactionButton = document.querySelector('#fillBlockedTransaction');
 const resetTransactionFormButton = document.querySelector('#resetTransactionForm');
-const fillPrescriptionDemoButton = document.querySelector('#fillPrescriptionDemo');
 const resetPrescriptionFormButton = document.querySelector('#resetPrescriptionForm');
+const antibioticListForm = document.querySelector('#antibioticListForm');
+const antibioticClassListForm = document.querySelector('#antibioticClassListForm');
+const antibioticList = document.querySelector('#antibioticList');
+const antibioticClassList = document.querySelector('#antibioticClassList');
 
 let lookupTimer = null;
 let currentMedicineResults = [];
+let referenceLists = {
+  antibiotics: [],
+  antibioticClasses: []
+};
 
 function setAlert(type, message, reason = '') {
   renderAlert(alertArea, type, message, reason);
@@ -31,6 +37,10 @@ function setAlert(type, message, reason = '') {
 
 function setPrescriptionAlert(type, message, reason = '') {
   renderAlert(prescriptionAlertArea, type, message, reason);
+}
+
+function setSettingsAlert(type, message, reason = '') {
+  renderAlert(settingsAlertArea, type, message, reason);
 }
 
 function renderAlert(target, type, message, reason = '') {
@@ -64,16 +74,6 @@ function formatTimestamp(timestamp) {
   }).format(new Date(timestamp));
 }
 
-function setFormValues(targetForm, values) {
-  Object.entries(values).forEach(([name, value]) => {
-    const field = targetForm.elements.namedItem(name);
-
-    if (field) {
-      field.value = value;
-    }
-  });
-}
-
 function clearAlert(target) {
   target.innerHTML = '';
 }
@@ -93,6 +93,10 @@ function setActiveTab(panelId) {
 
   if (panelId === 'doctorPanel') {
     loadPrescriptions();
+  }
+
+  if (panelId === 'settingsPanel') {
+    loadReferenceLists();
   }
 }
 
@@ -147,6 +151,96 @@ function renderMedicineSuggestions(results, source) {
   medicineSuggestions.classList.add('visible');
   antibioticInput.setAttribute('aria-expanded', 'true');
   lookupSource.textContent = source ? `Medicine source: ${source}` : '';
+}
+
+function populateAntibioticClassSelects() {
+  document.querySelectorAll('select[name="antibioticClass"]').forEach((select) => {
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">Select class</option>';
+
+    referenceLists.antibioticClasses.forEach((item) => {
+      const option = document.createElement('option');
+      option.value = item;
+      option.textContent = item;
+      select.append(option);
+    });
+
+    if (referenceLists.antibioticClasses.includes(currentValue)) {
+      select.value = currentValue;
+    }
+  });
+}
+
+function renderSettingsList(category, target, items) {
+  if (items.length === 0) {
+    target.innerHTML = '<div class="empty-cell">No items configured.</div>';
+    return;
+  }
+
+  target.innerHTML = items
+    .map((item) => {
+      return `
+        <div class="settings-item">
+          <span>${escapeHtml(item)}</span>
+          <button class="icon-button" type="button" data-category="${escapeHtml(category)}" data-value="${escapeHtml(item)}" aria-label="Delete ${escapeHtml(item)}">X</button>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+async function loadReferenceList(category) {
+  const response = await fetch(`/api/reference/${category}`);
+
+  if (!response.ok) {
+    throw new Error(`Unable to load ${category}`);
+  }
+
+  const data = await response.json();
+  referenceLists[category] = data.items ?? [];
+}
+
+async function loadReferenceLists() {
+  try {
+    await Promise.all([loadReferenceList('antibiotics'), loadReferenceList('antibioticClasses')]);
+    renderSettingsList('antibiotics', antibioticList, referenceLists.antibiotics);
+    renderSettingsList('antibioticClasses', antibioticClassList, referenceLists.antibioticClasses);
+    populateAntibioticClassSelects();
+  } catch (error) {
+    setSettingsAlert('danger', 'Unable to load settings.', error.message);
+  }
+}
+
+async function addReferenceItem(category, value) {
+  const response = await fetch(`/api/reference/${category}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ value })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Unable to add item');
+  }
+
+  referenceLists[category] = data.items ?? [];
+}
+
+async function deleteReferenceItem(category, value) {
+  const response = await fetch(`/api/reference/${category}/${encodeURIComponent(value)}`, {
+    method: 'DELETE'
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Unable to delete item');
+  }
+
+  referenceLists[category] = data.items ?? [];
 }
 
 async function checkHealth() {
@@ -277,7 +371,7 @@ async function loadPrescriptions() {
 async function searchMedicines(query) {
   const trimmed = query.trim();
 
-  lookupSource.textContent = trimmed.length < 2 ? 'Showing seed antibiotic list...' : 'Searching medicines...';
+  lookupSource.textContent = trimmed.length < 2 ? 'Showing configured antibiotic list...' : 'Searching medicines...';
 
   try {
     const response = await fetch(`/api/medicines/search?q=${encodeURIComponent(trimmed)}`);
@@ -330,36 +424,6 @@ medicineSuggestions.addEventListener('mousedown', (event) => {
   }
 });
 
-fillValidTransactionButton.addEventListener('click', () => {
-  setFormValues(form, {
-    patientId: '12345',
-    hospitalName: 'National General Hospital',
-    prescriberLicense: '98765',
-    antibiotic: 'Amoxicillin',
-    antibioticClass: 'Penicillin',
-    dosage: '500mg',
-    quantity: '10',
-    treatmentDurationDays: '5'
-  });
-  clearAlert(alertArea);
-  lookupSource.textContent = '';
-});
-
-fillBlockedTransactionButton.addEventListener('click', () => {
-  setFormValues(form, {
-    patientId: '00000',
-    hospitalName: 'National General Hospital',
-    prescriberLicense: '98765',
-    antibiotic: 'Amoxicillin',
-    antibioticClass: 'Penicillin',
-    dosage: '500mg',
-    quantity: '1',
-    treatmentDurationDays: '5'
-  });
-  clearAlert(alertArea);
-  lookupSource.textContent = '';
-});
-
 resetTransactionFormButton.addEventListener('click', () => {
   form.reset();
   clearAlert(alertArea);
@@ -368,24 +432,65 @@ resetTransactionFormButton.addEventListener('click', () => {
   hideMedicineSuggestions();
 });
 
-fillPrescriptionDemoButton.addEventListener('click', () => {
-  setFormValues(prescriptionForm, {
-    patientId: '77777',
-    hospitalName: 'University Medical Center',
-    prescriberLicense: 'DOC-2026',
-    antibioticName: 'Cefixime',
-    antibioticClass: 'Cephalosporin',
-    dosage: '200mg',
-    quantityLimit: '14',
-    treatmentDurationDays: '7',
-    expiryDate: '2027-12-31'
-  });
-  clearAlert(prescriptionAlertArea);
-});
-
 resetPrescriptionFormButton.addEventListener('click', () => {
   prescriptionForm.reset();
   clearAlert(prescriptionAlertArea);
+});
+
+antibioticListForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const value = new FormData(antibioticListForm).get('value');
+
+  try {
+    await addReferenceItem('antibiotics', value);
+    antibioticListForm.reset();
+    renderSettingsList('antibiotics', antibioticList, referenceLists.antibiotics);
+    setSettingsAlert('success', 'Antibiotic list updated.');
+  } catch (error) {
+    setSettingsAlert('danger', 'Unable to add antibiotic.', error.message);
+  }
+});
+
+antibioticClassListForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const value = new FormData(antibioticClassListForm).get('value');
+
+  try {
+    await addReferenceItem('antibioticClasses', value);
+    antibioticClassListForm.reset();
+    renderSettingsList('antibioticClasses', antibioticClassList, referenceLists.antibioticClasses);
+    populateAntibioticClassSelects();
+    setSettingsAlert('success', 'Antibiotic class list updated.');
+  } catch (error) {
+    setSettingsAlert('danger', 'Unable to add antibiotic class.', error.message);
+  }
+});
+
+document.addEventListener('click', async (event) => {
+  const deleteButton = event.target.closest('.icon-button[data-category][data-value]');
+
+  if (!deleteButton) {
+    return;
+  }
+
+  const { category, value } = deleteButton.dataset;
+
+  try {
+    await deleteReferenceItem(category, value);
+
+    if (category === 'antibiotics') {
+      renderSettingsList('antibiotics', antibioticList, referenceLists.antibiotics);
+    }
+
+    if (category === 'antibioticClasses') {
+      renderSettingsList('antibioticClasses', antibioticClassList, referenceLists.antibioticClasses);
+      populateAntibioticClassSelects();
+    }
+
+    setSettingsAlert('success', 'Reference item deleted.');
+  } catch (error) {
+    setSettingsAlert('danger', 'Unable to delete reference item.', error.message);
+  }
 });
 
 document.addEventListener('mousedown', (event) => {
@@ -502,5 +607,6 @@ clearDataButton.addEventListener('click', async () => {
 });
 
 checkHealth();
+loadReferenceLists();
 loadTransactions();
 loadPrescriptions();

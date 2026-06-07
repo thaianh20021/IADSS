@@ -8,11 +8,12 @@ Vietnamese version: [README.vi.md](README.vi.md)
 
 - Pharmacy POS transaction form.
 - Hospital / Doctor Portal for creating valid prescription records.
-- Prescription validation against seeded valid prescriptions.
+- Prescription validation against prescriptions entered through the Hospital / Doctor Portal.
 - MOH dashboard with approved and blocked transaction history.
+- Settings tab for managing antibiotic and antibiotic class reference lists.
 - PostgreSQL support through `DATABASE_URL`.
 - Local file fallback database for quick development without external setup.
-- Medicine search endpoint using public APIs with a local antibiotic fallback list.
+- Medicine search endpoint using public APIs with a configurable antibiotic fallback list.
 
 ## Local Development
 
@@ -23,18 +24,20 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Useful seeded valid prescriptions:
-
-| Patient ID | Hospital / Clinic | Prescriber License | Antibiotic | Quantity Limit |
-| --- | --- | --- | --- | --- |
-| 12345 | National General Hospital | 98765 | Amoxicillin, Penicillin, 500mg, 5 days | 20 |
-| 24680 | City Children Hospital | 13579 | Azithromycin, Macrolide, 250mg, 3 days | 6 |
-| 11223 | District Medical Center | 44556 | Cephalexin, Cephalosporin, 500mg, 7 days | 28 |
-
 ## Local Test Checklist
 
-1. Open the Pharmacy POS tab.
-2. Submit a valid transaction:
+1. Open the Hospital / Doctor Portal tab.
+2. Create a prescription:
+   - Patient ID: `12345`
+   - Hospital / Clinic: `National General Hospital`
+   - Prescriber License Number: `98765`
+   - Antibiotic Name: `Amoxicillin`
+   - Antibiotic Class: `Penicillin`
+   - Dosage: `500mg`
+   - Quantity Limit: `20`
+   - Treatment Duration: `5`
+   - Expiry Date: any future date
+3. Open the Pharmacy POS tab and submit a matching transaction:
    - Patient ID: `12345`
    - Hospital / Clinic: `National General Hospital`
    - Prescriber License Number: `98765`
@@ -43,8 +46,8 @@ Useful seeded valid prescriptions:
    - Dosage: `500mg`
    - Quantity: `10`
    - Treatment Duration: `5`
-3. Confirm the green message appears: `Transaction Approved. Data synced to MOH.`
-4. Submit an invalid transaction:
+4. Confirm the green message appears: `Transaction Approved. Data synced to MOH.`
+5. Submit an invalid transaction:
    - Patient ID: `00000`
    - Hospital / Clinic: `National General Hospital`
    - Prescriber License Number: `98765`
@@ -53,10 +56,11 @@ Useful seeded valid prescriptions:
    - Dosage: `500mg`
    - Quantity: `1`
    - Treatment Duration: `5`
-5. Confirm the red message appears: `HIGH RISK ALERT: Invalid Prescription. Sale Blocked.`
-6. Open the MOH Dashboard tab and confirm both transactions are logged.
-7. Confirm the blocked row has a light red background.
-8. Click `Clear Data` to reset the dashboard for another test run.
+6. Confirm the red message appears: `HIGH RISK ALERT: Invalid Prescription. Sale Blocked.`
+7. Open the MOH Dashboard tab and confirm both transactions are logged.
+8. Confirm the blocked row has a light red background.
+9. Open Settings to add or remove antibiotics and antibiotic classes used by dropdowns.
+10. Click `Clear Data` to reset the dashboard for another test run.
 
 You can also run the automated smoke test:
 
@@ -64,7 +68,7 @@ You can also run the automated smoke test:
 npm run smoke
 ```
 
-The smoke test verifies health, seed prescriptions, a doctor-created prescription, approved transactions, a blocked transaction, transaction history, a 33% misuse rate, and medicine lookup.
+The smoke test verifies health, reference lists, doctor-created prescriptions, approved transactions, a blocked transaction, transaction history, a 33% misuse rate, and medicine lookup.
 
 ## Render Deployment
 
@@ -105,7 +109,18 @@ Send your public Render URL to 2-3 testers with this message:
 ```text
 You are a pharmacist testing an antibiotic surveillance MVP.
 
-1. Try selling Amoxicillin with fake prescription details:
+1. Open the Hospital / Doctor Portal tab and create a prescription:
+   Patient ID: 12345
+   Hospital / Clinic: National General Hospital
+   Prescriber License Number: 98765
+   Antibiotic Name: Amoxicillin
+   Antibiotic Class: Penicillin
+   Dosage: 500mg
+   Quantity Limit: 20
+   Treatment Duration: 5
+   Expiry Date: any future date
+
+2. Try selling Amoxicillin with fake prescription details:
    Patient ID: 00000
    Hospital / Clinic: National General Hospital
    Prescriber License Number: 98765
@@ -114,7 +129,7 @@ You are a pharmacist testing an antibiotic surveillance MVP.
    Quantity: 1
    Treatment Duration: 5
 
-2. Then try selling Amoxicillin with valid prescription details:
+3. Then try selling Amoxicillin with valid prescription details:
    Patient ID: 12345
    Hospital / Clinic: National General Hospital
    Prescriber License Number: 98765
@@ -138,13 +153,19 @@ For a fuller Vietnamese tester script, feedback table, and pass criteria, use [d
 - `GET /api/prescriptions`
 - `POST /api/prescriptions`
 - `GET /api/medicines/search?q=amoxicillin`
+- `GET /api/reference/antibiotics`
+- `POST /api/reference/antibiotics`
+- `DELETE /api/reference/antibiotics/:value`
+- `GET /api/reference/antibioticClasses`
+- `POST /api/reference/antibioticClasses`
+- `DELETE /api/reference/antibioticClasses/:value`
 - `GET /api/transactions`
 - `POST /api/transactions`
 - `DELETE /api/transactions`
 
 ## Public Medicine Data
 
-The medicine search endpoint tries public APIs first and then falls back to the seed antibiotic list:
+The medicine search endpoint tries public APIs first and then falls back to the configured antibiotic list:
 
 1. openFDA Drug Label API
 2. RxNorm/RxNav API

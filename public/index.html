@@ -31,6 +31,9 @@
       <button class="tab-button" type="button" data-tab="apiDocsPanel">
         POS API Docs
       </button>
+      <button class="tab-button" type="button" data-tab="settingsPanel">
+        Settings
+      </button>
     </nav>
 
     <main class="app-shell">
@@ -39,8 +42,6 @@
           <h2>Pharmacy POS</h2>
           <div class="panel-actions">
             <span class="panel-chip">Live validation</span>
-            <button class="ghost-button" id="fillValidTransaction" type="button">Valid Demo</button>
-            <button class="ghost-button" id="fillBlockedTransaction" type="button">Blocked Demo</button>
             <button class="ghost-button" id="resetTransactionForm" type="button">Reset</button>
           </div>
         </div>
@@ -48,17 +49,17 @@
         <form class="transaction-form" id="transactionForm">
           <label>
             <span>Patient ID</span>
-            <input id="patientId" name="patientId" type="text" placeholder="12345" autocomplete="off" required>
+            <input id="patientId" name="patientId" type="text" placeholder="Patient ID or national ID" autocomplete="off" required>
           </label>
 
           <label>
             <span>Hospital / Clinic Visited</span>
-            <input id="hospitalName" name="hospitalName" type="text" placeholder="National General Hospital" autocomplete="off" required>
+            <input id="hospitalName" name="hospitalName" type="text" placeholder="Hospital or clinic name" autocomplete="off" required>
           </label>
 
           <label>
             <span>Prescriber License Number</span>
-            <input id="prescriberLicense" name="prescriberLicense" type="text" placeholder="98765" autocomplete="off" required>
+            <input id="prescriberLicense" name="prescriberLicense" type="text" placeholder="Prescriber license number" autocomplete="off" required>
           </label>
 
           <label>
@@ -72,7 +73,7 @@
                 autocomplete="off"
                 aria-controls="medicineSuggestions"
                 aria-expanded="false"
-                placeholder="Amoxicillin"
+                placeholder="Search antibiotic name"
                 required
               >
               <div class="medicine-suggestions" id="medicineSuggestions" role="listbox"></div>
@@ -84,30 +85,22 @@
             <span>Antibiotic Class</span>
             <select id="antibioticClass" name="antibioticClass" required>
               <option value="">Select class</option>
-              <option value="Penicillin">Penicillin</option>
-              <option value="Macrolide">Macrolide</option>
-              <option value="Cephalosporin">Cephalosporin</option>
-              <option value="Fluoroquinolone">Fluoroquinolone</option>
-              <option value="Tetracycline">Tetracycline</option>
-              <option value="Nitroimidazole">Nitroimidazole</option>
-              <option value="Lincosamide">Lincosamide</option>
-              <option value="Sulfonamide">Sulfonamide</option>
             </select>
           </label>
 
           <label>
             <span>Dosage</span>
-            <input id="dosage" name="dosage" type="text" placeholder="500mg" autocomplete="off" required>
+            <input id="dosage" name="dosage" type="text" placeholder="e.g. 500mg" autocomplete="off" required>
           </label>
 
           <label>
             <span>Quantity</span>
-            <input id="quantity" name="quantity" type="number" min="1" step="1" placeholder="10" required>
+            <input id="quantity" name="quantity" type="number" min="1" step="1" placeholder="Quantity dispensed" required>
           </label>
 
           <label>
             <span>Treatment Duration (days)</span>
-            <input id="treatmentDurationDays" name="treatmentDurationDays" type="number" min="1" step="1" placeholder="5" required>
+            <input id="treatmentDurationDays" name="treatmentDurationDays" type="number" min="1" step="1" placeholder="Number of days" required>
           </label>
 
           <div class="form-actions">
@@ -124,7 +117,6 @@
           <h2>Hospital / Doctor Portal</h2>
           <div class="panel-actions">
             <span class="panel-chip">Prescription registry</span>
-            <button class="ghost-button" id="fillPrescriptionDemo" type="button">Doctor Demo</button>
             <button class="ghost-button" id="resetPrescriptionForm" type="button">Reset</button>
           </div>
         </div>
@@ -132,52 +124,44 @@
         <form class="transaction-form" id="prescriptionForm">
           <label>
             <span>Patient ID</span>
-            <input name="patientId" type="text" placeholder="77777" autocomplete="off" required>
+            <input name="patientId" type="text" placeholder="Patient ID or national ID" autocomplete="off" required>
           </label>
 
           <label>
             <span>Hospital / Clinic</span>
-            <input name="hospitalName" type="text" placeholder="National General Hospital" autocomplete="off" required>
+            <input name="hospitalName" type="text" placeholder="Hospital or clinic name" autocomplete="off" required>
           </label>
 
           <label>
             <span>Prescriber License Number</span>
-            <input name="prescriberLicense" type="text" placeholder="DOC-2026" autocomplete="off" required>
+            <input name="prescriberLicense" type="text" placeholder="Prescriber license number" autocomplete="off" required>
           </label>
 
           <label>
             <span>Antibiotic Name</span>
-            <input name="antibioticName" type="text" placeholder="Cefixime" autocomplete="off" required>
+            <input name="antibioticName" type="text" placeholder="Antibiotic name" autocomplete="off" required>
           </label>
 
           <label>
             <span>Antibiotic Class</span>
             <select name="antibioticClass" required>
               <option value="">Select class</option>
-              <option value="Penicillin">Penicillin</option>
-              <option value="Macrolide">Macrolide</option>
-              <option value="Cephalosporin">Cephalosporin</option>
-              <option value="Fluoroquinolone">Fluoroquinolone</option>
-              <option value="Tetracycline">Tetracycline</option>
-              <option value="Nitroimidazole">Nitroimidazole</option>
-              <option value="Lincosamide">Lincosamide</option>
-              <option value="Sulfonamide">Sulfonamide</option>
             </select>
           </label>
 
           <label>
             <span>Dosage</span>
-            <input name="dosage" type="text" placeholder="500mg" autocomplete="off" required>
+            <input name="dosage" type="text" placeholder="e.g. 500mg" autocomplete="off" required>
           </label>
 
           <label>
             <span>Quantity Limit</span>
-            <input name="quantityLimit" type="number" min="1" step="1" placeholder="14" required>
+            <input name="quantityLimit" type="number" min="1" step="1" placeholder="Maximum quantity" required>
           </label>
 
           <label>
             <span>Treatment Duration (days)</span>
-            <input name="treatmentDurationDays" type="number" min="1" step="1" placeholder="7" required>
+            <input name="treatmentDurationDays" type="number" min="1" step="1" placeholder="Number of days" required>
           </label>
 
           <label>
@@ -292,9 +276,9 @@
           <section class="doc-block wide">
             <h3>Example Request</h3>
             <pre><code>{
-  "patientId": "12345",
-  "hospitalName": "National General Hospital",
-  "prescriberLicense": "98765",
+  "patientId": "PT-2026-0001",
+  "hospitalName": "City General Hospital",
+  "prescriberLicense": "VN-MOH-2048",
   "antibiotic": "Amoxicillin",
   "antibioticClass": "Penicillin",
   "dosage": "500mg",
@@ -324,6 +308,39 @@
             </ul>
           </section>
         </div>
+      </section>
+
+      <section class="tab-panel" id="settingsPanel">
+        <div class="panel-heading">
+          <h2>Settings</h2>
+          <span class="panel-chip">Reference lists</span>
+        </div>
+
+        <div class="settings-grid">
+          <section class="settings-block">
+            <div class="subsection-heading compact">
+              <h3>Antibiotic List</h3>
+            </div>
+            <form class="settings-form" id="antibioticListForm">
+              <input name="value" type="text" placeholder="Add antibiotic name" autocomplete="off" required>
+              <button class="primary-button" type="submit">Add</button>
+            </form>
+            <div class="settings-list" id="antibioticList"></div>
+          </section>
+
+          <section class="settings-block">
+            <div class="subsection-heading compact">
+              <h3>Antibiotic Classes</h3>
+            </div>
+            <form class="settings-form" id="antibioticClassListForm">
+              <input name="value" type="text" placeholder="Add antibiotic class" autocomplete="off" required>
+              <button class="primary-button" type="submit">Add</button>
+            </form>
+            <div class="settings-list" id="antibioticClassList"></div>
+          </section>
+        </div>
+
+        <div class="alert-area" id="settingsAlertArea" role="status" aria-live="polite"></div>
       </section>
     </main>
 

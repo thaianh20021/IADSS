@@ -13,6 +13,23 @@ const testDbPath = path.join(os.tmpdir(), `iadss-test-${Date.now()}.json`);
 let app;
 let db;
 
+async function saveAmoxicillinPrescription() {
+  return request(app)
+    .post('/api/prescriptions')
+    .send({
+      patientId: '12345',
+      hospitalName: 'National General Hospital',
+      prescriberLicense: '98765',
+      antibioticName: 'Amoxicillin',
+      antibioticClass: 'Penicillin',
+      dosage: '500mg',
+      quantityLimit: 20,
+      treatmentDurationDays: 5,
+      expiryDate: '2027-12-31'
+    })
+    .expect(201);
+}
+
 describe('IADSS API', () => {
   before(async () => {
     db = await createDatabase({ filePath: testDbPath });
@@ -24,14 +41,27 @@ describe('IADSS API', () => {
     await fs.rm(testDbPath, { force: true });
   });
 
-  it('seeds valid prescriptions', async () => {
+  it('starts without demo prescriptions and exposes configurable reference lists', async () => {
     const response = await request(app).get('/api/prescriptions').expect(200);
 
-    assert.equal(response.body.prescriptions.length, 3);
-    assert.equal(response.body.prescriptions[0].patientId, '12345');
+    assert.equal(response.body.prescriptions.length, 0);
+
+    const antibiotics = await request(app).get('/api/reference/antibiotics').expect(200);
+    assert.ok(antibiotics.body.items.includes('Amoxicillin'));
+
+    const classes = await request(app).get('/api/reference/antibioticClasses').expect(200);
+    assert.ok(classes.body.items.includes('Penicillin'));
+
+    const added = await request(app).post('/api/reference/antibiotics').send({ value: 'Testamycin' }).expect(201);
+    assert.ok(added.body.items.includes('Testamycin'));
+
+    const deleted = await request(app).delete('/api/reference/antibiotics/Testamycin').expect(200);
+    assert.equal(deleted.body.items.includes('Testamycin'), false);
   });
 
-  it('approves a valid prescription transaction', async () => {
+  it('approves a prescription entered by a hospital or doctor', async () => {
+    await saveAmoxicillinPrescription();
+
     const response = await request(app)
       .post('/api/transactions')
       .send({
@@ -101,6 +131,8 @@ describe('IADSS API', () => {
   });
 
   it('blocks invalid prescription details', async () => {
+    await saveAmoxicillinPrescription();
+
     const response = await request(app)
       .post('/api/transactions')
       .send({
@@ -120,6 +152,8 @@ describe('IADSS API', () => {
   });
 
   it('blocks transactions from the wrong hospital or clinic', async () => {
+    await saveAmoxicillinPrescription();
+
     const response = await request(app)
       .post('/api/transactions')
       .send({
@@ -139,6 +173,8 @@ describe('IADSS API', () => {
   });
 
   it('blocks transactions that exceed the prescription quantity limit', async () => {
+    await saveAmoxicillinPrescription();
+
     const response = await request(app)
       .post('/api/transactions')
       .send({
@@ -158,6 +194,8 @@ describe('IADSS API', () => {
   });
 
   it('blocks transactions that exceed the prescription treatment duration', async () => {
+    await saveAmoxicillinPrescription();
+
     const response = await request(app)
       .post('/api/transactions')
       .send({
@@ -177,6 +215,8 @@ describe('IADSS API', () => {
   });
 
   it('blocks transactions with the wrong antibiotic class', async () => {
+    await saveAmoxicillinPrescription();
+
     const response = await request(app)
       .post('/api/transactions')
       .send({
@@ -214,11 +254,11 @@ describe('IADSS API', () => {
     assert.ok(response.body.results.some((medicine) => medicine.name === 'Amoxicillin'));
   });
 
-  it('returns the seed medicine list when the query is empty', async () => {
+  it('returns the configured medicine list when the query is empty', async () => {
     const response = await request(app).get('/api/medicines/search').expect(200);
 
     assert.equal(response.body.source, 'fallback');
     assert.ok(response.body.results.length >= 8);
-    assert.ok(response.body.results.some((medicine) => medicine.name === 'Cephalexin'));
+    assert.ok(response.body.results.some((medicine) => medicine.name === 'Amoxicillin'));
   });
 });

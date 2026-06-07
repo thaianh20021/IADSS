@@ -14,6 +14,19 @@ Bạn đang đóng vai dược sĩ trong một nhà thuốc.
 Mở app IADSS tại đây:
 [Dán public URL vào đây]
 
+Kịch bản 0: Tạo đơn thuốc trước
+1. Mở tab Hospital / Doctor Portal.
+2. Nhập đơn thuốc:
+   Patient ID: 12345
+   Hospital / Clinic: National General Hospital
+   Prescriber License Number: 98765
+   Antibiotic Name: Amoxicillin
+   Antibiotic Class: Penicillin
+   Dosage: 500mg
+   Quantity Limit: 20
+   Treatment Duration: 5
+   Expiry Date: chọn ngày trong tương lai
+
 Kịch bản 1: Thử bán Amoxicillin với thông tin không hợp lệ
 - Patient ID: 00000
 - Hospital / Clinic: National General Hospital
@@ -96,7 +109,7 @@ The alpha test passes when:
 ## Known MVP Limits
 
 - This is not a real medical verification system.
-- Prescriptions are seeded demo records.
-- Medicine lookup uses public APIs and fallback seed data, not Long Chau private APIs.
+- Prescriptions must be entered through the Hospital / Doctor Portal before POS can approve them.
+- Medicine lookup uses public APIs and the configured fallback list, not Long Chau private APIs.
 - There is no authentication yet.
 - MOH sync is simulated by saving records into the backend database.
