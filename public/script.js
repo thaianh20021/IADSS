@@ -78,6 +78,10 @@ function clearAlert(target) {
   target.innerHTML = '';
 }
 
+function getStatusClass(status) {
+  return String(status ?? 'invalid').toLowerCase().replaceAll(' ', '-');
+}
+
 function setActiveTab(panelId) {
   tabButtons.forEach((button) => {
     button.classList.toggle('active', button.dataset.tab === panelId);
@@ -264,7 +268,7 @@ async function checkHealth() {
 async function loadTransactions() {
   rows.innerHTML = `
     <tr>
-      <td colspan="8" class="empty-cell">Loading transactions...</td>
+      <td colspan="10" class="empty-cell">Loading transactions...</td>
     </tr>
   `;
 
@@ -282,7 +286,7 @@ async function loadTransactions() {
     if (transactions.length === 0) {
       rows.innerHTML = `
         <tr>
-          <td colspan="8" class="empty-cell">No transactions recorded.</td>
+          <td colspan="10" class="empty-cell">No transactions recorded.</td>
         </tr>
       `;
       return;
@@ -292,17 +296,20 @@ async function loadTransactions() {
       .map((transaction) => {
         const isBlocked = transaction.status === 'Blocked';
         const statusClass = isBlocked ? 'blocked' : 'approved';
+        const prescriptionStatusClass = getStatusClass(transaction.prescriptionStatus);
 
         return `
           <tr class="${isBlocked ? 'blocked-row' : ''}">
             <td>${escapeHtml(formatTimestamp(transaction.timestamp))}</td>
+            <td>${escapeHtml(transaction.prescriptionId || 'N/A')}</td>
             <td>${escapeHtml(transaction.patientId || 'N/A')}</td>
             <td>${escapeHtml(transaction.hospitalName || 'N/A')}</td>
             <td>${escapeHtml(transaction.antibiotic || 'N/A')}</td>
-            <td>${escapeHtml(transaction.antibioticClass || 'N/A')}</td>
-            <td>${escapeHtml(transaction.dosage || 'N/A')}</td>
+            <td>${escapeHtml(transaction.quantity || 'N/A')}</td>
             <td>${escapeHtml(transaction.treatmentDurationDays || 'N/A')}</td>
+            <td><span class="status-badge ${prescriptionStatusClass}">${escapeHtml(transaction.prescriptionStatus || 'Invalid')}</span></td>
             <td><span class="status-badge ${statusClass}">${escapeHtml(transaction.status)}</span></td>
+            <td>${escapeHtml(transaction.reason || 'N/A')}</td>
           </tr>
         `;
       })
@@ -311,7 +318,7 @@ async function loadTransactions() {
     updateMetrics([]);
     rows.innerHTML = `
       <tr>
-        <td colspan="8" class="empty-cell">Unable to load transactions.</td>
+        <td colspan="10" class="empty-cell">Unable to load transactions.</td>
       </tr>
     `;
   }
@@ -320,7 +327,7 @@ async function loadTransactions() {
 async function loadPrescriptions() {
   prescriptionRows.innerHTML = `
     <tr>
-      <td colspan="8" class="empty-cell">Loading prescriptions...</td>
+      <td colspan="11" class="empty-cell">Loading prescriptions...</td>
     </tr>
   `;
 
@@ -337,7 +344,7 @@ async function loadPrescriptions() {
     if (prescriptions.length === 0) {
       prescriptionRows.innerHTML = `
         <tr>
-          <td colspan="8" class="empty-cell">No prescriptions saved.</td>
+          <td colspan="11" class="empty-cell">No prescriptions saved.</td>
         </tr>
       `;
       return;
@@ -345,16 +352,21 @@ async function loadPrescriptions() {
 
     prescriptionRows.innerHTML = prescriptions
       .map((prescription) => {
+        const prescriptionStatusClass = getStatusClass(prescription.prescriptionStatus);
+
         return `
           <tr>
+            <td>${escapeHtml(prescription.prescriptionId)}</td>
             <td>${escapeHtml(prescription.patientId)}</td>
             <td>${escapeHtml(prescription.hospitalName)}</td>
             <td>${escapeHtml(prescription.prescriberLicense)}</td>
             <td>${escapeHtml(prescription.antibioticName)}</td>
+            <td><span class="status-badge ${prescriptionStatusClass}">${escapeHtml(prescription.prescriptionStatus)}</span></td>
             <td>${escapeHtml(prescription.antibioticClass)}</td>
             <td>${escapeHtml(prescription.dosage)}</td>
             <td>${escapeHtml(prescription.quantityLimit)}</td>
             <td>${escapeHtml(prescription.treatmentDurationDays)} days</td>
+            <td>${escapeHtml(prescription.expiryDate)}</td>
           </tr>
         `;
       })
@@ -362,7 +374,7 @@ async function loadPrescriptions() {
   } catch (error) {
     prescriptionRows.innerHTML = `
       <tr>
-        <td colspan="8" class="empty-cell">Unable to load prescriptions.</td>
+        <td colspan="11" class="empty-cell">Unable to load prescriptions.</td>
       </tr>
     `;
   }
@@ -504,6 +516,7 @@ form.addEventListener('submit', async (event) => {
 
   const formData = new FormData(form);
   const payload = {
+    prescriptionId: formData.get('prescriptionId'),
     patientId: formData.get('patientId'),
     hospitalName: formData.get('hospitalName'),
     prescriberLicense: formData.get('prescriberLicense'),
@@ -551,6 +564,7 @@ prescriptionForm.addEventListener('submit', async (event) => {
 
   const formData = new FormData(prescriptionForm);
   const payload = {
+    prescriptionId: formData.get('prescriptionId'),
     patientId: formData.get('patientId'),
     hospitalName: formData.get('hospitalName'),
     prescriberLicense: formData.get('prescriberLicense'),

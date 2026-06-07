@@ -9,6 +9,8 @@ Vietnamese version: [README.vi.md](README.vi.md)
 - Pharmacy POS transaction form.
 - Hospital / Doctor Portal for creating valid prescription records.
 - Prescription validation against prescriptions entered through the Hospital / Doctor Portal.
+- Prescription ID / QR-code status checks: Valid, Expired, Already Dispensed.
+- Repeated purchases are blocked after a prescription has already been dispensed.
 - MOH dashboard with approved and blocked transaction history.
 - Settings tab for managing antibiotic and antibiotic class reference lists.
 - PostgreSQL support through `DATABASE_URL`.
@@ -28,6 +30,7 @@ Open `http://localhost:3000`.
 
 1. Open the Hospital / Doctor Portal tab.
 2. Create a prescription:
+   - Prescription ID: `RX-2026-0001`
    - Patient ID: `12345`
    - Hospital / Clinic: `National General Hospital`
    - Prescriber License Number: `98765`
@@ -38,6 +41,7 @@ Open `http://localhost:3000`.
    - Treatment Duration: `5`
    - Expiry Date: any future date
 3. Open the Pharmacy POS tab and submit a matching transaction:
+   - Prescription ID: `RX-2026-0001`
    - Patient ID: `12345`
    - Hospital / Clinic: `National General Hospital`
    - Prescriber License Number: `98765`
@@ -47,7 +51,9 @@ Open `http://localhost:3000`.
    - Quantity: `10`
    - Treatment Duration: `5`
 4. Confirm the green message appears: `Transaction Approved. Data synced to MOH.`
-5. Submit an invalid transaction:
+5. Submit the same valid transaction again and confirm it is blocked as `Already Dispensed`.
+6. Submit an invalid transaction:
+   - Prescription ID: `RX-UNKNOWN`
    - Patient ID: `00000`
    - Hospital / Clinic: `National General Hospital`
    - Prescriber License Number: `98765`
@@ -56,11 +62,11 @@ Open `http://localhost:3000`.
    - Dosage: `500mg`
    - Quantity: `1`
    - Treatment Duration: `5`
-6. Confirm the red message appears: `HIGH RISK ALERT: Invalid Prescription. Sale Blocked.`
-7. Open the MOH Dashboard tab and confirm both transactions are logged.
-8. Confirm the blocked row has a light red background.
-9. Open Settings to add or remove antibiotics and antibiotic classes used by dropdowns.
-10. Click `Clear Data` to reset the dashboard for another test run.
+7. Confirm the red message appears: `HIGH RISK ALERT: Invalid Prescription. Sale Blocked.`
+8. Open the MOH Dashboard tab and confirm Approved, Blocked, and prescription status are logged.
+9. Confirm the blocked row has a light red background.
+10. Open Settings to add or remove antibiotics and antibiotic classes used by dropdowns.
+11. Click `Clear Data` to reset the dashboard for another test run.
 
 You can also run the automated smoke test:
 
@@ -68,7 +74,7 @@ You can also run the automated smoke test:
 npm run smoke
 ```
 
-The smoke test verifies health, reference lists, doctor-created prescriptions, approved transactions, a blocked transaction, transaction history, a 33% misuse rate, and medicine lookup.
+The smoke test verifies health, reference lists, doctor-created prescriptions, approved transactions, repeated purchase blocking, transaction history, misuse rate, and medicine lookup.
 
 ## Render Deployment
 
@@ -110,6 +116,7 @@ Send your public Render URL to 2-3 testers with this message:
 You are a pharmacist testing an antibiotic surveillance MVP.
 
 1. Open the Hospital / Doctor Portal tab and create a prescription:
+   Prescription ID: RX-2026-0001
    Patient ID: 12345
    Hospital / Clinic: National General Hospital
    Prescriber License Number: 98765
@@ -121,6 +128,7 @@ You are a pharmacist testing an antibiotic surveillance MVP.
    Expiry Date: any future date
 
 2. Try selling Amoxicillin with fake prescription details:
+   Prescription ID: RX-UNKNOWN
    Patient ID: 00000
    Hospital / Clinic: National General Hospital
    Prescriber License Number: 98765
@@ -130,6 +138,7 @@ You are a pharmacist testing an antibiotic surveillance MVP.
    Treatment Duration: 5
 
 3. Then try selling Amoxicillin with valid prescription details:
+   Prescription ID: RX-2026-0001
    Patient ID: 12345
    Hospital / Clinic: National General Hospital
    Prescriber License Number: 98765

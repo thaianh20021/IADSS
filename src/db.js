@@ -91,6 +91,12 @@ const LEGACY_DEMO_PRESCRIPTION_KEYS = [
   }
 ];
 
+const PRESCRIPTION_STATUS = {
+  VALID: 'Valid',
+  EXPIRED: 'Expired',
+  ALREADY_DISPENSED: 'Already Dispensed'
+};
+
 function normalizeText(value) {
   return String(value ?? '').trim();
 }
@@ -105,6 +111,35 @@ function clone(value) {
 
 function uniqueSorted(values) {
   return [...new Set(values.map(normalizeText).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function getTodayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getPrescriptionStatus(prescription) {
+  if (prescription.dispensedAt) {
+    return PRESCRIPTION_STATUS.ALREADY_DISPENSED;
+  }
+
+  if (prescription.expiryDate < getTodayIsoDate()) {
+    return PRESCRIPTION_STATUS.EXPIRED;
+  }
+
+  return PRESCRIPTION_STATUS.VALID;
+}
+
+function createLegacyPrescriptionId(prescription, index) {
+  const fallback = `RX-LEGACY-${String(index + 1).padStart(4, '0')}`;
+  const pieces = [
+    prescription.patientId,
+    prescription.prescriberLicense,
+    prescription.antibioticName
+  ]
+    .map((value) => normalizeText(value).replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, ''))
+    .filter(Boolean);
+
+  return pieces.length > 0 ? `RX-${pieces.join('-')}` : fallback;
 }
 
 function createPostgresPool(databaseUrl) {
@@ -128,6 +163,7 @@ class PostgresDatabase {
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS valid_prescriptions (
         id SERIAL PRIMARY KEY,
+        prescription_id TEXT NOT NULL UNIQUE,
         patient_id TEXT NOT NULL,
         hospital_name TEXT NOT NULL DEFAULT '',
         prescriber_license TEXT NOT NULL,
@@ -137,8 +173,8 @@ class PostgresDatabase {
         quantity_limit INTEGER NOT NULL,
         treatment_duration_days INTEGER NOT NULL DEFAULT 1,
         expiry_date DATE NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        UNIQUE (patient_id, prescriber_license, antibiotic_name)
+        dispensed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
 
@@ -146,6 +182,7 @@ class PostgresDatabase {
       CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
         timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        prescription_id TEXT,
         patient_id TEXT,
         hospital_name TEXT,
         prescriber_license TEXT,
@@ -154,19 +191,32 @@ class PostgresDatabase {
         dosage TEXT,
         quantity INTEGER,
         treatment_duration_days INTEGER,
+        prescription_status TEXT,
         status TEXT NOT NULL CHECK (status IN ('Approved', 'Blocked')),
         reason TEXT NOT NULL
       );
     `);
 
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS prescription_id TEXT;');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS hospital_name TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS antibiotic_class TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dosage TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS treatment_duration_days INTEGER NOT NULL DEFAULT 1;');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dispensed_at TIMESTAMPTZ;');
+    await this.pool.query(`
+      UPDATE valid_prescriptions
+      SET prescription_id = 'RX-LEGACY-' || id::text
+      WHERE prescription_id IS NULL OR prescription_id = '';
+    `);
+    await this.pool.query('ALTER TABLE valid_prescriptions ALTER COLUMN prescription_id SET NOT NULL;');
+    await this.pool.query('ALTER TABLE valid_prescriptions DROP CONSTRAINT IF EXISTS valid_prescriptions_patient_id_prescriber_license_antibiotic_name_key;');
+    await this.pool.query('CREATE UNIQUE INDEX IF NOT EXISTS valid_prescriptions_prescription_id_key ON valid_prescriptions (prescription_id);');
+    await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS prescription_id TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS hospital_name TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS antibiotic_class TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS dosage TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS treatment_duration_days INTEGER;');
+    await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS prescription_status TEXT;');
 
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS medicine_cache (
@@ -227,6 +277,7 @@ class PostgresDatabase {
   async getPrescriptions() {
     const result = await this.pool.query(`
       SELECT
+        prescription_id AS "prescriptionId",
         patient_id AS "patientId",
         hospital_name AS "hospitalName",
         prescriber_license AS "prescriberLicense",
@@ -235,7 +286,13 @@ class PostgresDatabase {
         dosage,
         quantity_limit AS "quantityLimit",
         treatment_duration_days AS "treatmentDurationDays",
-        expiry_date::text AS "expiryDate"
+        expiry_date::text AS "expiryDate",
+        dispensed_at AS "dispensedAt",
+        CASE
+          WHEN dispensed_at IS NOT NULL THEN 'Already Dispensed'
+          WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+          ELSE 'Valid'
+        END AS "prescriptionStatus"
       FROM valid_prescriptions
       ORDER BY patient_id, antibiotic_name;
     `);
@@ -247,6 +304,7 @@ class PostgresDatabase {
     const result = await this.pool.query(
       `
         INSERT INTO valid_prescriptions (
+          prescription_id,
           patient_id,
           hospital_name,
           prescriber_license,
@@ -257,16 +315,20 @@ class PostgresDatabase {
           treatment_duration_days,
           expiry_date
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (patient_id, prescriber_license, antibiotic_name)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (prescription_id)
         DO UPDATE SET
           hospital_name = EXCLUDED.hospital_name,
+          patient_id = EXCLUDED.patient_id,
+          prescriber_license = EXCLUDED.prescriber_license,
+          antibiotic_name = EXCLUDED.antibiotic_name,
           antibiotic_class = EXCLUDED.antibiotic_class,
           dosage = EXCLUDED.dosage,
           quantity_limit = EXCLUDED.quantity_limit,
           treatment_duration_days = EXCLUDED.treatment_duration_days,
           expiry_date = EXCLUDED.expiry_date
         RETURNING
+          prescription_id AS "prescriptionId",
           patient_id AS "patientId",
           hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
@@ -275,9 +337,16 @@ class PostgresDatabase {
           dosage,
           quantity_limit AS "quantityLimit",
           treatment_duration_days AS "treatmentDurationDays",
-          expiry_date::text AS "expiryDate";
+          expiry_date::text AS "expiryDate",
+          dispensed_at AS "dispensedAt",
+          CASE
+            WHEN dispensed_at IS NOT NULL THEN 'Already Dispensed'
+            WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+            ELSE 'Valid'
+          END AS "prescriptionStatus";
       `,
       [
+        prescription.prescriptionId,
         prescription.patientId,
         prescription.hospitalName,
         prescription.prescriberLicense,
@@ -293,10 +362,11 @@ class PostgresDatabase {
     return result.rows[0];
   }
 
-  async findValidPrescription({ patientId, hospitalName, prescriberLicense, antibioticName }) {
+  async findPrescriptionById(prescriptionId) {
     const result = await this.pool.query(
       `
         SELECT
+          prescription_id AS "prescriptionId",
           patient_id AS "patientId",
           hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
@@ -305,25 +375,39 @@ class PostgresDatabase {
           dosage,
           quantity_limit AS "quantityLimit",
           treatment_duration_days AS "treatmentDurationDays",
-          expiry_date::text AS "expiryDate"
+          expiry_date::text AS "expiryDate",
+          dispensed_at AS "dispensedAt",
+          CASE
+            WHEN dispensed_at IS NOT NULL THEN 'Already Dispensed'
+            WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+            ELSE 'Valid'
+          END AS "prescriptionStatus"
         FROM valid_prescriptions
-        WHERE patient_id = $1
-          AND LOWER(hospital_name) = LOWER($2)
-          AND prescriber_license = $3
-          AND LOWER(antibiotic_name) = LOWER($4)
-          AND expiry_date >= CURRENT_DATE
+        WHERE LOWER(prescription_id) = LOWER($1)
         LIMIT 1;
       `,
-      [patientId, hospitalName, prescriberLicense, antibioticName]
+      [prescriptionId]
     );
 
     return result.rows[0] ?? null;
+  }
+
+  async markPrescriptionDispensed(prescriptionId) {
+    await this.pool.query(
+      `
+        UPDATE valid_prescriptions
+        SET dispensed_at = COALESCE(dispensed_at, NOW())
+        WHERE LOWER(prescription_id) = LOWER($1);
+      `,
+      [prescriptionId]
+    );
   }
 
   async saveTransaction(transaction) {
     const result = await this.pool.query(
       `
         INSERT INTO transactions (
+          prescription_id,
           patient_id,
           hospital_name,
           prescriber_license,
@@ -332,13 +416,15 @@ class PostgresDatabase {
           dosage,
           quantity,
           treatment_duration_days,
+          prescription_status,
           status,
           reason
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING
           id,
           timestamp,
+          prescription_id AS "prescriptionId",
           patient_id AS "patientId",
           hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
@@ -347,10 +433,12 @@ class PostgresDatabase {
           dosage,
           quantity,
           treatment_duration_days AS "treatmentDurationDays",
+          prescription_status AS "prescriptionStatus",
           status,
           reason;
       `,
       [
+        transaction.prescriptionId,
         transaction.patientId,
         transaction.hospitalName,
         transaction.prescriberLicense,
@@ -359,6 +447,7 @@ class PostgresDatabase {
         transaction.dosage,
         transaction.quantity,
         transaction.treatmentDurationDays,
+        transaction.prescriptionStatus,
         transaction.status,
         transaction.reason
       ]
@@ -372,6 +461,7 @@ class PostgresDatabase {
       SELECT
         id,
         timestamp,
+        prescription_id AS "prescriptionId",
         patient_id AS "patientId",
         hospital_name AS "hospitalName",
         prescriber_license AS "prescriberLicense",
@@ -380,6 +470,7 @@ class PostgresDatabase {
         dosage,
         quantity,
         treatment_duration_days AS "treatmentDurationDays",
+        prescription_status AS "prescriptionStatus",
         status,
         reason
       FROM transactions
@@ -527,7 +618,7 @@ class JsonFileDatabase {
   migrateSeedPrescriptionFields() {
     let changed = false;
 
-    this.state.validPrescriptions = this.state.validPrescriptions.map((prescription) => {
+    this.state.validPrescriptions = this.state.validPrescriptions.map((prescription, index) => {
       const seed = LEGACY_DEMO_PRESCRIPTIONS.find((item) => {
         return (
           item.patientId === prescription.patientId &&
@@ -536,21 +627,31 @@ class JsonFileDatabase {
         );
       });
 
+      const prescriptionWithId = {
+        ...prescription,
+        prescriptionId: prescription.prescriptionId || createLegacyPrescriptionId(prescription, index)
+      };
+
+      if (!prescription.prescriptionId) {
+        changed = true;
+      }
+
       if (!seed) {
         if (!prescription.hospitalName) {
           changed = true;
           return {
-            ...prescription,
+            ...prescriptionWithId,
             hospitalName: 'Unknown Hospital / Clinic'
           };
         }
 
-        return prescription;
+        return prescriptionWithId;
       }
 
       const merged = {
         ...seed,
-        ...prescription,
+        ...prescriptionWithId,
+        prescriptionId: prescriptionWithId.prescriptionId,
         hospitalName: prescription.hospitalName || seed.hospitalName,
         antibioticClass: prescription.antibioticClass || seed.antibioticClass,
         dosage: prescription.dosage || seed.dosage,
@@ -623,52 +724,78 @@ class JsonFileDatabase {
   }
 
   async getPrescriptions() {
-    return clone(this.state.validPrescriptions);
+    return clone(
+      this.state.validPrescriptions.map((prescription) => ({
+        ...prescription,
+        dispensedAt: prescription.dispensedAt ?? null,
+        prescriptionStatus: getPrescriptionStatus(prescription)
+      }))
+    );
   }
 
   async savePrescription(prescription) {
     const existingIndex = this.state.validPrescriptions.findIndex((item) => {
-      return (
-        item.patientId === prescription.patientId &&
-        item.hospitalName === prescription.hospitalName &&
-        item.prescriberLicense === prescription.prescriberLicense &&
-        normalizeMedicine(item.antibioticName) === normalizeMedicine(prescription.antibioticName)
-      );
+      return normalizeText(item.prescriptionId).toLowerCase() === normalizeText(prescription.prescriptionId).toLowerCase();
     });
 
     if (existingIndex >= 0) {
       this.state.validPrescriptions[existingIndex] = {
         ...this.state.validPrescriptions[existingIndex],
-        ...prescription
+        ...prescription,
+        dispensedAt: this.state.validPrescriptions[existingIndex].dispensedAt ?? null
       };
     } else {
-      this.state.validPrescriptions.push(prescription);
+      this.state.validPrescriptions.push({
+        ...prescription,
+        dispensedAt: null
+      });
     }
 
     await this.persist();
-    return clone(existingIndex >= 0 ? this.state.validPrescriptions[existingIndex] : prescription);
+    const saved = existingIndex >= 0
+      ? this.state.validPrescriptions[existingIndex]
+      : this.state.validPrescriptions[this.state.validPrescriptions.length - 1];
+
+    return clone({
+      ...saved,
+      prescriptionStatus: getPrescriptionStatus(saved)
+    });
   }
 
-  async findValidPrescription({ patientId, hospitalName, prescriberLicense, antibioticName }) {
-    const today = new Date().toISOString().slice(0, 10);
+  async findPrescriptionById(prescriptionId) {
+    const prescription = this.state.validPrescriptions.find((item) => {
+      return normalizeText(item.prescriptionId).toLowerCase() === normalizeText(prescriptionId).toLowerCase();
+    });
 
-    return (
-      this.state.validPrescriptions.find((prescription) => {
-        return (
-          prescription.patientId === patientId &&
-          normalizeText(prescription.hospitalName).toLowerCase() === normalizeText(hospitalName).toLowerCase() &&
-          prescription.prescriberLicense === prescriberLicense &&
-          normalizeMedicine(prescription.antibioticName) === normalizeMedicine(antibioticName) &&
-          prescription.expiryDate >= today
-        );
-      }) ?? null
-    );
+    if (!prescription) {
+      return null;
+    }
+
+    return clone({
+      ...prescription,
+      dispensedAt: prescription.dispensedAt ?? null,
+      prescriptionStatus: getPrescriptionStatus(prescription)
+    });
+  }
+
+  async markPrescriptionDispensed(prescriptionId) {
+    const prescription = this.state.validPrescriptions.find((item) => {
+      return normalizeText(item.prescriptionId).toLowerCase() === normalizeText(prescriptionId).toLowerCase();
+    });
+
+    if (!prescription) {
+      return;
+    }
+
+    prescription.dispensedAt = prescription.dispensedAt ?? new Date().toISOString();
+    await this.persist();
   }
 
   async saveTransaction(transaction) {
     const saved = {
       id: this.state.counters.transactions,
       timestamp: new Date().toISOString(),
+      prescriptionId: transaction.prescriptionId,
       patientId: transaction.patientId,
       hospitalName: transaction.hospitalName,
       prescriberLicense: transaction.prescriberLicense,
@@ -677,6 +804,7 @@ class JsonFileDatabase {
       dosage: transaction.dosage,
       quantity: transaction.quantity,
       treatmentDurationDays: transaction.treatmentDurationDays,
+      prescriptionStatus: transaction.prescriptionStatus,
       status: transaction.status,
       reason: transaction.reason
     };

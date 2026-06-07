@@ -13,6 +13,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 const REFERENCE_CATEGORIES = new Set(['antibiotics', 'antibioticClasses']);
+const PRESCRIPTION_STATUS = {
+  VALID: 'Valid',
+  EXPIRED: 'Expired',
+  ALREADY_DISPENSED: 'Already Dispensed',
+  INVALID: 'Invalid'
+};
 
 function isFreshCache(cached) {
   if (!cached?.fetchedAt) {
@@ -188,6 +194,7 @@ async function searchMedicines(db, query) {
 }
 
 function evaluateRequiredFields({
+  prescriptionId,
   patientId,
   hospitalName,
   prescriberLicense,
@@ -198,6 +205,7 @@ function evaluateRequiredFields({
   treatmentDurationDays
 }) {
   if (
+    !prescriptionId ||
     !patientId ||
     !hospitalName ||
     !prescriberLicense ||
@@ -222,6 +230,7 @@ function evaluateRequiredFields({
 }
 
 async function evaluateTransaction(db, payload) {
+  const prescriptionId = normalizeInput(payload.prescriptionId);
   const patientId = normalizeInput(payload.patientId);
   const hospitalName = normalizeInput(payload.hospitalName);
   const prescriberLicense = normalizeInput(payload.prescriberLicense);
@@ -232,6 +241,7 @@ async function evaluateTransaction(db, payload) {
   const treatmentDurationDays = Number(payload.treatmentDurationDays);
 
   const missingReason = evaluateRequiredFields({
+    prescriptionId,
     patientId,
     hospitalName,
     prescriberLicense,
@@ -244,6 +254,7 @@ async function evaluateTransaction(db, payload) {
 
   if (missingReason) {
     return {
+      prescriptionId,
       patientId,
       hospitalName,
       prescriberLicense,
@@ -252,20 +263,17 @@ async function evaluateTransaction(db, payload) {
       dosage,
       quantity: Number.isFinite(quantity) ? quantity : null,
       treatmentDurationDays: Number.isFinite(treatmentDurationDays) ? treatmentDurationDays : null,
+      prescriptionStatus: PRESCRIPTION_STATUS.INVALID,
       status: 'Blocked',
       reason: missingReason
     };
   }
 
-  const prescription = await db.findValidPrescription({
-    patientId,
-    hospitalName,
-    prescriberLicense,
-    antibioticName: antibiotic
-  });
+  const prescription = await db.findPrescriptionById(prescriptionId);
 
   if (!prescription) {
     return {
+      prescriptionId,
       patientId,
       hospitalName,
       prescriberLicense,
@@ -274,13 +282,87 @@ async function evaluateTransaction(db, payload) {
       dosage,
       quantity,
       treatmentDurationDays,
+      prescriptionStatus: PRESCRIPTION_STATUS.INVALID,
       status: 'Blocked',
-      reason: 'Invalid prescription details.'
+      reason: 'Prescription ID was not found.'
+    };
+  }
+
+  if (prescription.prescriptionStatus === PRESCRIPTION_STATUS.EXPIRED) {
+    return {
+      prescriptionId,
+      patientId,
+      hospitalName,
+      prescriberLicense,
+      antibiotic,
+      antibioticClass,
+      dosage,
+      quantity,
+      treatmentDurationDays,
+      prescriptionStatus: PRESCRIPTION_STATUS.EXPIRED,
+      status: 'Blocked',
+      reason: 'Prescription status is Expired.'
+    };
+  }
+
+  if (prescription.prescriptionStatus === PRESCRIPTION_STATUS.ALREADY_DISPENSED) {
+    return {
+      prescriptionId,
+      patientId,
+      hospitalName,
+      prescriberLicense,
+      antibiotic,
+      antibioticClass,
+      dosage,
+      quantity,
+      treatmentDurationDays,
+      prescriptionStatus: PRESCRIPTION_STATUS.ALREADY_DISPENSED,
+      status: 'Blocked',
+      reason: 'Prescription status is Already Dispensed.'
+    };
+  }
+
+  if (
+    prescription.patientId !== patientId ||
+    prescription.prescriberLicense !== prescriberLicense ||
+    prescription.hospitalName.toLowerCase() !== hospitalName.toLowerCase()
+  ) {
+    return {
+      prescriptionId,
+      patientId,
+      hospitalName,
+      prescriberLicense,
+      antibiotic,
+      antibioticClass,
+      dosage,
+      quantity,
+      treatmentDurationDays,
+      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
+      status: 'Blocked',
+      reason: 'Patient, hospital, or prescriber does not match prescription record.'
+    };
+  }
+
+  if (prescription.antibioticName.toLowerCase() !== antibiotic.toLowerCase()) {
+    return {
+      prescriptionId,
+      patientId,
+      hospitalName,
+      prescriberLicense,
+      antibiotic,
+      antibioticClass,
+      dosage,
+      quantity,
+      treatmentDurationDays,
+      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
+      status: 'Blocked',
+      reason: `Antibiotic does not match prescription antibiotic ${prescription.antibioticName}.`
     };
   }
 
   if (prescription.antibioticClass.toLowerCase() !== antibioticClass.toLowerCase()) {
     return {
+      prescriptionId,
       patientId,
       hospitalName,
       prescriberLicense,
@@ -289,6 +371,7 @@ async function evaluateTransaction(db, payload) {
       dosage,
       quantity,
       treatmentDurationDays,
+      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
       status: 'Blocked',
       reason: `Antibiotic class does not match prescription class ${prescription.antibioticClass}.`
     };
@@ -296,6 +379,7 @@ async function evaluateTransaction(db, payload) {
 
   if (prescription.dosage.toLowerCase() !== dosage.toLowerCase()) {
     return {
+      prescriptionId,
       patientId,
       hospitalName,
       prescriberLicense,
@@ -304,6 +388,7 @@ async function evaluateTransaction(db, payload) {
       dosage,
       quantity,
       treatmentDurationDays,
+      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
       status: 'Blocked',
       reason: `Dosage does not match prescription dosage ${prescription.dosage}.`
     };
@@ -311,6 +396,7 @@ async function evaluateTransaction(db, payload) {
 
   if (quantity > prescription.quantityLimit) {
     return {
+      prescriptionId,
       patientId,
       hospitalName,
       prescriberLicense,
@@ -319,6 +405,7 @@ async function evaluateTransaction(db, payload) {
       dosage,
       quantity,
       treatmentDurationDays,
+      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
       status: 'Blocked',
       reason: `Requested quantity exceeds prescription limit of ${prescription.quantityLimit}.`
     };
@@ -326,6 +413,7 @@ async function evaluateTransaction(db, payload) {
 
   if (treatmentDurationDays > prescription.treatmentDurationDays) {
     return {
+      prescriptionId,
       patientId,
       hospitalName,
       prescriberLicense,
@@ -334,12 +422,14 @@ async function evaluateTransaction(db, payload) {
       dosage,
       quantity,
       treatmentDurationDays,
+      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
       status: 'Blocked',
       reason: `Treatment duration exceeds prescription duration of ${prescription.treatmentDurationDays} days.`
     };
   }
 
   return {
+    prescriptionId,
     patientId,
     hospitalName,
     prescriberLicense,
@@ -348,12 +438,14 @@ async function evaluateTransaction(db, payload) {
     dosage,
     quantity,
     treatmentDurationDays,
+    prescriptionStatus: PRESCRIPTION_STATUS.VALID,
     status: 'Approved',
     reason: 'Prescription verified.'
   };
 }
 
 function validatePrescriptionPayload(payload) {
+  const prescriptionId = normalizeInput(payload.prescriptionId);
   const patientId = normalizeInput(payload.patientId);
   const hospitalName = normalizeInput(payload.hospitalName);
   const prescriberLicense = normalizeInput(payload.prescriberLicense);
@@ -365,6 +457,7 @@ function validatePrescriptionPayload(payload) {
   const expiryDate = normalizeInput(payload.expiryDate);
 
   if (
+    !prescriptionId ||
     !patientId ||
     !hospitalName ||
     !prescriberLicense ||
@@ -400,6 +493,7 @@ function validatePrescriptionPayload(payload) {
 
   return {
     prescription: {
+      prescriptionId,
       patientId,
       hospitalName,
       prescriberLicense,
@@ -556,6 +650,10 @@ export async function createApp(options = {}) {
     try {
       const evaluated = await evaluateTransaction(db, request.body ?? {});
       const saved = await db.saveTransaction(evaluated);
+
+      if (saved.status === 'Approved') {
+        await db.markPrescriptionDispensed(saved.prescriptionId);
+      }
 
       response.status(201).json({
         transaction: saved,

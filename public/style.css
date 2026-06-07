@@ -445,10 +445,10 @@ h1 {
 
 table {
   width: 100%;
-  min-width: 1040px;
+  min-width: 1320px;
   border-collapse: collapse;
   background: #ffffff;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 th,
@@ -458,6 +458,7 @@ td {
   text-align: left;
   vertical-align: middle;
   overflow-wrap: anywhere;
+  min-width: 116px;
 }
 
 th {
@@ -513,6 +514,11 @@ td:nth-child(8) {
   width: 14%;
 }
 
+.table-wrap th,
+.table-wrap td {
+  width: auto;
+}
+
 tbody tr:last-child td {
   border-bottom: 0;
 }
@@ -546,6 +552,26 @@ tr.blocked-row:hover {
 .status-badge.blocked {
   background: var(--danger-bg);
   color: var(--danger-text);
+}
+
+.status-badge.valid {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.status-badge.expired {
+  background: #fff6df;
+  color: var(--amber);
+}
+
+.status-badge.already-dispensed {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.status-badge.invalid {
+  background: #eef2f7;
+  color: var(--muted);
 }
 
 .empty-cell {

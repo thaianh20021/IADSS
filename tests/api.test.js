@@ -12,22 +12,36 @@ const testDbPath = path.join(os.tmpdir(), `iadss-test-${Date.now()}.json`);
 
 let app;
 let db;
+let prescriptionCounter = 1;
 
-async function saveAmoxicillinPrescription() {
-  return request(app)
+function nextPrescriptionId(prefix = 'RX-TEST') {
+  const id = `${prefix}-${String(prescriptionCounter).padStart(3, '0')}`;
+  prescriptionCounter += 1;
+  return id;
+}
+
+async function saveAmoxicillinPrescription(overrides = {}) {
+  const prescriptionId = overrides.prescriptionId ?? nextPrescriptionId('RX-AMOX');
+  const payload = {
+    prescriptionId,
+    patientId: '12345',
+    hospitalName: 'National General Hospital',
+    prescriberLicense: '98765',
+    antibioticName: 'Amoxicillin',
+    antibioticClass: 'Penicillin',
+    dosage: '500mg',
+    quantityLimit: 20,
+    treatmentDurationDays: 5,
+    expiryDate: '2027-12-31',
+    ...overrides
+  };
+
+  const response = await request(app)
     .post('/api/prescriptions')
-    .send({
-      patientId: '12345',
-      hospitalName: 'National General Hospital',
-      prescriberLicense: '98765',
-      antibioticName: 'Amoxicillin',
-      antibioticClass: 'Penicillin',
-      dosage: '500mg',
-      quantityLimit: 20,
-      treatmentDurationDays: 5,
-      expiryDate: '2027-12-31'
-    })
+    .send(payload)
     .expect(201);
+
+  return response.body.prescription;
 }
 
 describe('IADSS API', () => {
@@ -60,11 +74,12 @@ describe('IADSS API', () => {
   });
 
   it('approves a prescription entered by a hospital or doctor', async () => {
-    await saveAmoxicillinPrescription();
+    const prescription = await saveAmoxicillinPrescription();
 
     const response = await request(app)
       .post('/api/transactions')
       .send({
+        prescriptionId: prescription.prescriptionId,
         patientId: '12345',
         hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
@@ -77,13 +92,20 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(response.body.transaction.status, 'Approved');
+    assert.equal(response.body.transaction.prescriptionStatus, 'Valid');
     assert.equal(response.body.message, 'Transaction Approved. Data synced to MOH.');
+
+    const prescriptions = await request(app).get('/api/prescriptions').expect(200);
+    const dispensed = prescriptions.body.prescriptions.find((item) => item.prescriptionId === prescription.prescriptionId);
+    assert.equal(dispensed.prescriptionStatus, 'Already Dispensed');
   });
 
   it('lets a doctor create a prescription that the pharmacy POS can verify', async () => {
+    const prescriptionId = nextPrescriptionId('RX-DOCTOR');
     const prescription = await request(app)
       .post('/api/prescriptions')
       .send({
+        prescriptionId,
         patientId: '77777',
         hospitalName: 'University Medical Center',
         prescriberLicense: 'DOC-2026',
@@ -97,10 +119,12 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(prescription.body.prescription.patientId, '77777');
+    assert.equal(prescription.body.prescription.prescriptionStatus, 'Valid');
 
     const transaction = await request(app)
       .post('/api/transactions')
       .send({
+        prescriptionId,
         patientId: '77777',
         hospitalName: 'University Medical Center',
         prescriberLicense: 'DOC-2026',
@@ -113,6 +137,55 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(transaction.body.transaction.status, 'Approved');
+  });
+
+  it('blocks repeated purchase after a prescription is already dispensed', async () => {
+    const prescription = await saveAmoxicillinPrescription();
+    const payload = {
+      prescriptionId: prescription.prescriptionId,
+      patientId: '12345',
+      hospitalName: 'National General Hospital',
+      prescriberLicense: '98765',
+      antibiotic: 'Amoxicillin',
+      antibioticClass: 'Penicillin',
+      dosage: '500mg',
+      quantity: 10,
+      treatmentDurationDays: 5
+    };
+
+    const approved = await request(app).post('/api/transactions').send(payload).expect(201);
+    assert.equal(approved.body.transaction.status, 'Approved');
+
+    const repeated = await request(app).post('/api/transactions').send(payload).expect(201);
+    assert.equal(repeated.body.transaction.status, 'Blocked');
+    assert.equal(repeated.body.transaction.prescriptionStatus, 'Already Dispensed');
+    assert.equal(repeated.body.transaction.reason, 'Prescription status is Already Dispensed.');
+  });
+
+  it('blocks expired prescriptions', async () => {
+    const prescription = await saveAmoxicillinPrescription({
+      prescriptionId: nextPrescriptionId('RX-EXPIRED'),
+      expiryDate: '2020-01-01'
+    });
+
+    const response = await request(app)
+      .post('/api/transactions')
+      .send({
+        prescriptionId: prescription.prescriptionId,
+        patientId: '12345',
+        hospitalName: 'National General Hospital',
+        prescriberLicense: '98765',
+        antibiotic: 'Amoxicillin',
+        antibioticClass: 'Penicillin',
+        dosage: '500mg',
+        quantity: 10,
+        treatmentDurationDays: 5
+      })
+      .expect(201);
+
+    assert.equal(response.body.transaction.status, 'Blocked');
+    assert.equal(response.body.transaction.prescriptionStatus, 'Expired');
+    assert.equal(response.body.transaction.reason, 'Prescription status is Expired.');
   });
 
   it('blocks missing transaction fields', async () => {
@@ -131,11 +204,12 @@ describe('IADSS API', () => {
   });
 
   it('blocks invalid prescription details', async () => {
-    await saveAmoxicillinPrescription();
+    const prescription = await saveAmoxicillinPrescription();
 
     const response = await request(app)
       .post('/api/transactions')
       .send({
+        prescriptionId: prescription.prescriptionId,
         patientId: '12345',
         hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
@@ -148,15 +222,16 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(response.body.transaction.status, 'Blocked');
-    assert.equal(response.body.transaction.reason, 'Invalid prescription details.');
+    assert.equal(response.body.transaction.reason, 'Antibiotic does not match prescription antibiotic Amoxicillin.');
   });
 
   it('blocks transactions from the wrong hospital or clinic', async () => {
-    await saveAmoxicillinPrescription();
+    const prescription = await saveAmoxicillinPrescription();
 
     const response = await request(app)
       .post('/api/transactions')
       .send({
+        prescriptionId: prescription.prescriptionId,
         patientId: '12345',
         hospitalName: 'Wrong Hospital',
         prescriberLicense: '98765',
@@ -169,15 +244,16 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(response.body.transaction.status, 'Blocked');
-    assert.equal(response.body.transaction.reason, 'Invalid prescription details.');
+    assert.equal(response.body.transaction.reason, 'Patient, hospital, or prescriber does not match prescription record.');
   });
 
   it('blocks transactions that exceed the prescription quantity limit', async () => {
-    await saveAmoxicillinPrescription();
+    const prescription = await saveAmoxicillinPrescription();
 
     const response = await request(app)
       .post('/api/transactions')
       .send({
+        prescriptionId: prescription.prescriptionId,
         patientId: '12345',
         hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
@@ -194,11 +270,12 @@ describe('IADSS API', () => {
   });
 
   it('blocks transactions that exceed the prescription treatment duration', async () => {
-    await saveAmoxicillinPrescription();
+    const prescription = await saveAmoxicillinPrescription();
 
     const response = await request(app)
       .post('/api/transactions')
       .send({
+        prescriptionId: prescription.prescriptionId,
         patientId: '12345',
         hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
@@ -215,11 +292,12 @@ describe('IADSS API', () => {
   });
 
   it('blocks transactions with the wrong antibiotic class', async () => {
-    await saveAmoxicillinPrescription();
+    const prescription = await saveAmoxicillinPrescription();
 
     const response = await request(app)
       .post('/api/transactions')
       .send({
+        prescriptionId: prescription.prescriptionId,
         patientId: '12345',
         hospitalName: 'National General Hospital',
         prescriberLicense: '98765',
@@ -238,8 +316,9 @@ describe('IADSS API', () => {
   it('returns transaction history and clears it', async () => {
     const history = await request(app).get('/api/transactions').expect(200);
 
-    assert.equal(history.body.transactions.length, 8);
-    assert.equal(history.body.transactions[0].status, 'Blocked');
+    assert.ok(history.body.transactions.length >= 10);
+    assert.ok(history.body.transactions.some((transaction) => transaction.prescriptionStatus === 'Already Dispensed'));
+    assert.ok(history.body.transactions.some((transaction) => transaction.prescriptionStatus === 'Expired'));
 
     await request(app).delete('/api/transactions').expect(200);
 

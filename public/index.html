@@ -48,6 +48,11 @@
 
         <form class="transaction-form" id="transactionForm">
           <label>
+            <span>Prescription ID / QR Code</span>
+            <input id="prescriptionId" name="prescriptionId" type="text" placeholder="RX-2026-0001" autocomplete="off" required>
+          </label>
+
+          <label>
             <span>Patient ID</span>
             <input id="patientId" name="patientId" type="text" placeholder="Patient ID or national ID" autocomplete="off" required>
           </label>
@@ -123,6 +128,11 @@
 
         <form class="transaction-form" id="prescriptionForm">
           <label>
+            <span>Prescription ID / QR Code</span>
+            <input name="prescriptionId" type="text" placeholder="RX-2026-0001" autocomplete="off" required>
+          </label>
+
+          <label>
             <span>Patient ID</span>
             <input name="patientId" type="text" placeholder="Patient ID or national ID" autocomplete="off" required>
           </label>
@@ -184,19 +194,22 @@
           <table>
             <thead>
               <tr>
+                <th>Prescription ID</th>
                 <th>Patient ID</th>
                 <th>Hospital / Clinic</th>
                 <th>Prescriber</th>
                 <th>Antibiotic</th>
+                <th>Status</th>
                 <th>Class</th>
                 <th>Dosage</th>
                 <th>Limit</th>
                 <th>Duration</th>
+                <th>Expiry</th>
               </tr>
             </thead>
             <tbody id="prescriptionRows">
               <tr>
-                <td colspan="8" class="empty-cell">Loading prescriptions...</td>
+                <td colspan="11" class="empty-cell">Loading prescriptions...</td>
               </tr>
             </tbody>
           </table>
@@ -235,18 +248,20 @@
             <thead>
               <tr>
                 <th>Timestamp</th>
+                <th>Prescription ID</th>
                 <th>Patient ID</th>
                 <th>Hospital / Clinic</th>
                 <th>Antibiotic</th>
-                <th>Class</th>
-                <th>Dosage</th>
+                <th>Quantity</th>
                 <th>Duration</th>
+                <th>Rx Status</th>
                 <th>Status</th>
+                <th>Reason</th>
               </tr>
             </thead>
             <tbody id="transactionRows">
               <tr>
-                <td colspan="8" class="empty-cell">No transactions recorded.</td>
+                <td colspan="10" class="empty-cell">No transactions recorded.</td>
               </tr>
             </tbody>
           </table>
@@ -275,7 +290,8 @@
 
           <section class="doc-block wide">
             <h3>Example Request</h3>
-            <pre><code>{
+<pre><code>{
+  "prescriptionId": "RX-2026-0001",
   "patientId": "PT-2026-0001",
   "hospitalName": "City General Hospital",
   "prescriberLicense": "VN-MOH-2048",
@@ -293,6 +309,7 @@
   "message": "Transaction Approved. Data synced to MOH.",
   "transaction": {
     "status": "Approved",
+    "prescriptionStatus": "Valid",
     "reason": "Prescription verified."
   }
 }</code></pre>
@@ -302,7 +319,9 @@
             <h3>Decision Logic</h3>
             <ul>
               <li>Missing required data is blocked.</li>
-              <li>Patient ID, hospital or clinic, and prescriber license must match a valid prescription.</li>
+              <li>Prescription ID / QR code must match a record in the prescription registry.</li>
+              <li>Prescription status must be Valid, not Expired or Already Dispensed.</li>
+              <li>Patient ID, hospital or clinic, and prescriber license must match the prescription record.</li>
               <li>Antibiotic class, dosage, quantity, and treatment duration must match prescription limits.</li>
               <li>Every Approved and Blocked attempt is logged for the MOH Dashboard.</li>
             </ul>

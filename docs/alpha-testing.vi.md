@@ -15,6 +15,7 @@ Mở app IADSS tại đây:
 Kịch bản 0: Tạo đơn thuốc trước
 1. Mở tab Hospital / Doctor Portal.
 2. Nhập đơn thuốc:
+   Prescription ID: RX-2026-0001
    Patient ID: 12345
    Hospital / Clinic: National General Hospital
    Prescriber License Number: 98765
@@ -26,6 +27,7 @@ Kịch bản 0: Tạo đơn thuốc trước
    Expiry Date: chọn ngày trong tương lai
 
 Kịch bản 1: Thử bán Amoxicillin với thông tin không hợp lệ
+- Prescription ID: RX-UNKNOWN
 - Patient ID: 00000
 - Hospital / Clinic: National General Hospital
 - Prescriber License Number: 98765
@@ -38,6 +40,7 @@ Kịch bản 1: Thử bán Amoxicillin với thông tin không hợp lệ
 Kỳ vọng: hệ thống phải hiện cảnh báo đỏ và chặn giao dịch.
 
 Kịch bản 2: Thử bán Amoxicillin với thông tin hợp lệ
+- Prescription ID: RX-2026-0001
 - Patient ID: 12345
 - Hospital / Clinic: National General Hospital
 - Prescriber License Number: 98765
@@ -48,6 +51,10 @@ Kịch bản 2: Thử bán Amoxicillin với thông tin hợp lệ
 - Treatment Duration: 5
 
 Kỳ vọng: hệ thống phải hiện thông báo xanh Approved.
+
+Kịch bản 3: Gửi lại đúng giao dịch hợp lệ ở trên một lần nữa
+
+Kỳ vọng: hệ thống phải chặn giao dịch với trạng thái Already Dispensed.
 
 Sau đó mở tab MOH Dashboard và kiểm tra:
 - Cả 2 giao dịch đều xuất hiện trong bảng.
@@ -70,6 +77,7 @@ Dùng kịch bản này để kiểm tra flow bệnh viện/bác sĩ tạo đơn
 1. Mở tab Hospital / Doctor Portal.
 2. Tạo đơn thuốc mới:
    Patient ID: 77777
+   Prescription ID: RX-DOCTOR-77777
    Hospital / Clinic: University Medical Center
    Prescriber License Number: DOC-2026
    Antibiotic Name: Cefixime
@@ -80,7 +88,7 @@ Dùng kịch bản này để kiểm tra flow bệnh viện/bác sĩ tạo đơn
    Expiry Date: 2027-12-31
 
 3. Mở tab Pharmacy POS.
-4. Thử bán Cefixime với đúng thông tin bệnh nhân và đơn thuốc vừa tạo.
+4. Thử bán Cefixime với đúng Prescription ID, thông tin bệnh nhân và đơn thuốc vừa tạo.
 5. Xác nhận giao dịch được Approved.
 6. Đổi sai một trường, ví dụ dosage hoặc duration, và xác nhận giao dịch bị Blocked.
 ```

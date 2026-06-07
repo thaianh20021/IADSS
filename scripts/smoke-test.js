@@ -32,6 +32,9 @@ function assert(condition, message) {
 
 async function main() {
   console.log(`Running IADSS smoke test against ${baseUrl}`);
+  const runId = Date.now();
+  const cefiximePrescriptionId = `SMOKE-CFX-${runId}`;
+  const amoxicillinPrescriptionId = `SMOKE-AMOX-${runId}`;
 
   const health = await request('/api/health');
   assert(health.ok === true, 'Health check did not return ok=true.');
@@ -49,6 +52,7 @@ async function main() {
   const doctorPrescription = await request('/api/prescriptions', {
     method: 'POST',
     body: JSON.stringify({
+      prescriptionId: cefiximePrescriptionId,
       patientId: '88888',
       hospitalName: 'Smoke Test Hospital',
       prescriberLicense: 'DOC-SMOKE',
@@ -66,6 +70,7 @@ async function main() {
   const doctorApproved = await request('/api/transactions', {
     method: 'POST',
     body: JSON.stringify({
+      prescriptionId: cefiximePrescriptionId,
       patientId: '88888',
       hospitalName: 'Smoke Test Hospital',
       prescriberLicense: 'DOC-SMOKE',
@@ -77,11 +82,31 @@ async function main() {
     })
   });
   assert(doctorApproved.transaction.status === 'Approved', 'Doctor-created prescription was not approved by POS.');
+  assert(doctorApproved.transaction.prescriptionStatus === 'Valid', 'Approved transaction did not report Valid prescription status.');
   console.log('OK doctor-created prescription verified by POS');
+
+  const repeated = await request('/api/transactions', {
+    method: 'POST',
+    body: JSON.stringify({
+      prescriptionId: cefiximePrescriptionId,
+      patientId: '88888',
+      hospitalName: 'Smoke Test Hospital',
+      prescriberLicense: 'DOC-SMOKE',
+      antibiotic: 'Cefixime',
+      antibioticClass: 'Cephalosporin',
+      dosage: '200mg',
+      quantity: 14,
+      treatmentDurationDays: 7
+    })
+  });
+  assert(repeated.transaction.status === 'Blocked', 'Repeated purchase was not blocked.');
+  assert(repeated.transaction.prescriptionStatus === 'Already Dispensed', 'Repeated purchase did not report Already Dispensed.');
+  console.log('OK repeated purchase blocked');
 
   const amoxicillinPrescription = await request('/api/prescriptions', {
     method: 'POST',
     body: JSON.stringify({
+      prescriptionId: amoxicillinPrescriptionId,
       patientId: '12345',
       hospitalName: 'National General Hospital',
       prescriberLicense: '98765',
@@ -99,6 +124,7 @@ async function main() {
   const approved = await request('/api/transactions', {
     method: 'POST',
     body: JSON.stringify({
+      prescriptionId: amoxicillinPrescriptionId,
       patientId: '12345',
       hospitalName: 'National General Hospital',
       prescriberLicense: '98765',
@@ -115,6 +141,7 @@ async function main() {
   const blocked = await request('/api/transactions', {
     method: 'POST',
     body: JSON.stringify({
+      prescriptionId: `SMOKE-INVALID-${runId}`,
       patientId: '00000',
       hospitalName: 'National General Hospital',
       prescriberLicense: '98765',
@@ -134,11 +161,11 @@ async function main() {
   const blockedCount = transactions.filter((item) => item.status === 'Blocked').length;
   const misuseRate = Math.round((blockedCount / transactions.length) * 100);
 
-  assert(transactions.length === 3, `Expected 3 transactions, got ${transactions.length}.`);
+  assert(transactions.length === 4, `Expected 4 transactions, got ${transactions.length}.`);
   assert(approvedCount === 2, `Expected 2 approved transactions, got ${approvedCount}.`);
-  assert(blockedCount === 1, `Expected 1 blocked transaction, got ${blockedCount}.`);
-  assert(misuseRate === 33, `Expected misuse rate 33, got ${misuseRate}.`);
-  console.log('OK dashboard data supports 33% misuse rate');
+  assert(blockedCount === 2, `Expected 2 blocked transactions, got ${blockedCount}.`);
+  assert(misuseRate === 50, `Expected misuse rate 50, got ${misuseRate}.`);
+  console.log('OK dashboard data supports 50% misuse rate with repeated purchase block');
 
   const medicines = await request('/api/medicines/search?q=cephalexin');
   assert(Array.isArray(medicines.results), 'Medicine search did not return results array.');
