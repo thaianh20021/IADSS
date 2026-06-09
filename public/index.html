@@ -67,9 +67,17 @@
             <span>Scan QR / Enter Prescription ID</span>
             <div class="inline-lookup">
               <input id="lookupPrescriptionId" type="text" placeholder="RX-2026-0001" autocomplete="off">
+              <button class="ghost-button" id="scanQrButton" type="button">Scan QR</button>
               <button class="primary-button" id="loadPrescriptionButton" type="button">Load Prescription</button>
             </div>
           </label>
+          <div class="qr-scanner" id="qrScanner" hidden>
+            <video id="qrScannerVideo" playsinline muted></video>
+            <div class="qr-scanner-actions">
+              <span id="qrScannerStatus">Point camera at the prescription QR code.</span>
+              <button class="ghost-button" id="stopQrScanButton" type="button">Stop Scan</button>
+            </div>
+          </div>
           <div class="prescription-summary empty" id="loadedPrescriptionSummary">
             No prescription loaded.
           </div>
@@ -257,7 +265,7 @@
             <strong>IADSS Prescription</strong>
             <span id="printPrescriptionId">No prescription selected</span>
           </div>
-          <div class="qr-placeholder" id="qrPlaceholder">QR</div>
+          <img class="qr-image" id="qrImage" alt="Prescription QR code">
           <div id="printPrescriptionDetails"></div>
         </div>
 

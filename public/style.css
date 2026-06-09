@@ -411,6 +411,37 @@ h1 {
   color: var(--muted);
 }
 
+.qr-scanner {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.qr-scanner[hidden] {
+  display: none;
+}
+
+.qr-scanner video {
+  width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  background: #0f172a;
+  object-fit: cover;
+}
+
+.qr-scanner-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .medicine-field {
   position: relative;
 }
@@ -799,20 +830,13 @@ tr.overridden-row:hover {
   color: var(--medical-blue-dark);
 }
 
-.qr-placeholder {
+.qr-image {
   display: grid;
   width: 120px;
   height: 120px;
-  place-items: center;
-  border: 8px solid var(--text);
-  background:
-    linear-gradient(90deg, transparent 46%, var(--text) 46% 54%, transparent 54%),
-    linear-gradient(transparent 46%, var(--text) 46% 54%, transparent 54%);
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 900;
-  text-align: center;
-  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  object-fit: contain;
 }
 
 .print-prescription p {
@@ -859,7 +883,7 @@ tr.overridden-row:hover {
     font-size: 18px;
   }
 
-  .qr-placeholder {
+  .qr-image {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
@@ -1048,6 +1072,11 @@ tr.overridden-row:hover {
   .inline-lookup,
   .override-fields {
     grid-template-columns: 1fr;
+  }
+
+  .qr-scanner-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .metrics-grid {

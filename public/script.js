@@ -29,17 +29,24 @@ const drugList = document.querySelector('#drugList');
 const drugClassList = document.querySelector('#drugClassList');
 const lookupPrescriptionId = document.querySelector('#lookupPrescriptionId');
 const loadPrescriptionButton = document.querySelector('#loadPrescriptionButton');
+const scanQrButton = document.querySelector('#scanQrButton');
+const stopQrScanButton = document.querySelector('#stopQrScanButton');
+const qrScanner = document.querySelector('#qrScanner');
+const qrScannerVideo = document.querySelector('#qrScannerVideo');
+const qrScannerStatus = document.querySelector('#qrScannerStatus');
 const loadedPrescriptionSummary = document.querySelector('#loadedPrescriptionSummary');
 const printPrescriptionButton = document.querySelector('#printPrescriptionButton');
 const sendPrescriptionButton = document.querySelector('#sendPrescriptionButton');
 const printPrescription = document.querySelector('#printPrescription');
 const printPrescriptionId = document.querySelector('#printPrescriptionId');
 const printPrescriptionDetails = document.querySelector('#printPrescriptionDetails');
-const qrPlaceholder = document.querySelector('#qrPlaceholder');
+const qrImage = document.querySelector('#qrImage');
 
 let lookupTimer = null;
 let currentMedicineResults = [];
 let lastSavedPrescription = null;
+let qrScanStream = null;
+let qrScanTimer = null;
 let referenceLists = {
   drugs: [],
   drugClasses: []
@@ -516,6 +523,68 @@ async function loadPrescriptionForPharmacy(id = lookupPrescriptionId.value, shou
   }
 }
 
+function stopQrScanner() {
+  if (qrScanTimer) {
+    window.clearInterval(qrScanTimer);
+    qrScanTimer = null;
+  }
+
+  if (qrScanStream) {
+    qrScanStream.getTracks().forEach((track) => track.stop());
+    qrScanStream = null;
+  }
+
+  qrScanner.hidden = true;
+  qrScannerVideo.srcObject = null;
+}
+
+async function startQrScanner() {
+  if (!('BarcodeDetector' in window)) {
+    setAlert('danger', 'QR scanning is not supported in this browser.', 'Please type the Prescription ID manually.');
+    return;
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setAlert('danger', 'Camera access is not available.', 'Please type the Prescription ID manually.');
+    return;
+  }
+
+  try {
+    stopQrScanner();
+    qrScanner.hidden = false;
+    qrScannerStatus.textContent = 'Point camera at the prescription QR code.';
+    qrScanStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'environment'
+      },
+      audio: false
+    });
+    qrScannerVideo.srcObject = qrScanStream;
+    await qrScannerVideo.play();
+
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    qrScanTimer = window.setInterval(async () => {
+      try {
+        const codes = await detector.detect(qrScannerVideo);
+        const value = codes[0]?.rawValue?.trim();
+
+        if (!value) {
+          return;
+        }
+
+        lookupPrescriptionId.value = value;
+        stopQrScanner();
+        await loadPrescriptionForPharmacy(value);
+      } catch (error) {
+        qrScannerStatus.textContent = 'Unable to read QR code. Hold the code steady or type the ID manually.';
+      }
+    }, 450);
+  } catch (error) {
+    stopQrScanner();
+    setAlert('danger', 'Unable to start QR scanner.', 'Camera permission may be blocked. Please type the Prescription ID manually.');
+  }
+}
+
 function getPrescriptionFormPayload() {
   const formData = new FormData(prescriptionForm);
 
@@ -543,7 +612,8 @@ function renderPrintPrescription(prescription) {
   }
 
   printPrescriptionId.textContent = prescription.prescriptionId;
-  qrPlaceholder.textContent = prescription.prescriptionId;
+  qrImage.src = `/api/prescriptions/${encodeURIComponent(prescription.prescriptionId)}/qr`;
+  qrImage.alt = `QR code for prescription ${prescription.prescriptionId}`;
   printPrescriptionDetails.innerHTML = `
     <p><strong>Patient ID:</strong> ${escapeHtml(prescription.patientId)}</p>
     <p><strong>Hospital:</strong> ${escapeHtml(prescription.hospitalName)}</p>
@@ -625,6 +695,14 @@ loadPrescriptionButton.addEventListener('click', () => {
   loadPrescriptionForPharmacy();
 });
 
+scanQrButton.addEventListener('click', () => {
+  startQrScanner();
+});
+
+stopQrScanButton.addEventListener('click', () => {
+  stopQrScanner();
+});
+
 lookupPrescriptionId.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -649,6 +727,7 @@ resetPrescriptionFormButton.addEventListener('click', () => {
   printPrescription.classList.remove('ready');
   printPrescriptionId.textContent = 'No prescription selected';
   printPrescriptionDetails.innerHTML = '';
+  qrImage.removeAttribute('src');
   clearAlert(prescriptionAlertArea);
 });
 

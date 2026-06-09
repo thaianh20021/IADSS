@@ -3,6 +3,7 @@ import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
+import QRCode from 'qrcode';
 import {
   FALLBACK_DRUGS,
   createDatabase,
@@ -574,6 +575,29 @@ export async function createApp(options = {}) {
       response.json({
         prescription: sanitizePrescriptionForPharmacy(prescription)
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/prescriptions/:prescriptionId/qr', async (request, response, next) => {
+    try {
+      const prescription = await db.findPrescriptionById(request.params.prescriptionId);
+
+      if (!prescription) {
+        response.status(404).json({ error: 'Prescription ID was not found.' });
+        return;
+      }
+
+      const qrBuffer = await QRCode.toBuffer(prescription.prescriptionId, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 320
+      });
+
+      response.setHeader('Content-Type', 'image/png');
+      response.setHeader('Cache-Control', 'no-store');
+      response.send(qrBuffer);
     } catch (error) {
       next(error);
     }

@@ -144,6 +144,19 @@ describe('IADSS API', () => {
     assert.equal(transaction.body.transaction.status, 'Approved');
   });
 
+  it('generates a QR code image for a prescription ID', async () => {
+    const prescription = await saveAmoxicillinPrescription({
+      prescriptionId: nextPrescriptionId('RX-QR')
+    });
+
+    const response = await request(app)
+      .get(`/api/prescriptions/${prescription.prescriptionId}/qr`)
+      .expect(200)
+      .expect('Content-Type', /image\/png/);
+
+    assert.ok(response.body.length > 100);
+  });
+
   it('blocks cancelled prescriptions', async () => {
     const prescription = await saveAmoxicillinPrescription({
       prescriptionId: nextPrescriptionId('RX-CANCEL')
