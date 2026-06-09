@@ -97,7 +97,9 @@ describe('IADSS API', () => {
 
     const prescriptions = await request(app).get('/api/prescriptions').expect(200);
     const dispensed = prescriptions.body.prescriptions.find((item) => item.prescriptionId === prescription.prescriptionId);
-    assert.equal(dispensed.prescriptionStatus, 'Already Dispensed');
+    assert.equal(dispensed.prescriptionStatus, 'Partially Dispensed');
+    assert.equal(dispensed.dispensedQuantity, 10);
+    assert.equal(dispensed.remainingQuantity, 10);
   });
 
   it('lets a doctor create a prescription that the pharmacy POS can verify', async () => {
@@ -114,32 +116,54 @@ describe('IADSS API', () => {
         dosage: '200mg',
         quantityLimit: 14,
         treatmentDurationDays: 7,
-        expiryDate: '2027-12-31'
+        expiryDate: '2027-12-31',
+        mainDiagnosis: 'Acute pharyngitis',
+        icd10Code: 'J02.9',
+        clinicalNotes: 'Internal note',
+        drugAllergies: 'None known'
       })
       .expect(201);
 
     assert.equal(prescription.body.prescription.patientId, '77777');
     assert.equal(prescription.body.prescription.prescriptionStatus, 'Valid');
 
+    const lookup = await request(app).get(`/api/prescriptions/${prescriptionId}`).expect(200);
+    assert.equal(lookup.body.prescription.drugName, 'Cefixime');
+    assert.equal(lookup.body.prescription.remainingQuantity, 14);
+    assert.equal(lookup.body.prescription.mainDiagnosis, undefined);
+    assert.equal(lookup.body.prescription.clinicalNotes, undefined);
+
     const transaction = await request(app)
       .post('/api/transactions')
       .send({
         prescriptionId,
-        patientId: '77777',
-        hospitalName: 'University Medical Center',
-        prescriberLicense: 'DOC-2026',
-        antibiotic: 'Cefixime',
-        antibioticClass: 'Cephalosporin',
-        dosage: '200mg',
-        quantity: 14,
-        treatmentDurationDays: 7
+        quantity: 14
       })
       .expect(201);
 
     assert.equal(transaction.body.transaction.status, 'Approved');
   });
 
-  it('blocks repeated purchase after a prescription is already dispensed', async () => {
+  it('blocks cancelled prescriptions', async () => {
+    const prescription = await saveAmoxicillinPrescription({
+      prescriptionId: nextPrescriptionId('RX-CANCEL')
+    });
+
+    await request(app).post(`/api/prescriptions/${prescription.prescriptionId}/cancel`).expect(200);
+
+    const response = await request(app)
+      .post('/api/transactions')
+      .send({
+        prescriptionId: prescription.prescriptionId,
+        quantity: 1
+      })
+      .expect(201);
+
+    assert.equal(response.body.transaction.status, 'Blocked');
+    assert.equal(response.body.transaction.prescriptionStatus, 'Cancelled');
+  });
+
+  it('allows partial dispensing and blocks quantities above the remaining limit', async () => {
     const prescription = await saveAmoxicillinPrescription();
     const payload = {
       prescriptionId: prescription.prescriptionId,
@@ -156,10 +180,19 @@ describe('IADSS API', () => {
     const approved = await request(app).post('/api/transactions').send(payload).expect(201);
     assert.equal(approved.body.transaction.status, 'Approved');
 
-    const repeated = await request(app).post('/api/transactions').send(payload).expect(201);
-    assert.equal(repeated.body.transaction.status, 'Blocked');
-    assert.equal(repeated.body.transaction.prescriptionStatus, 'Already Dispensed');
-    assert.equal(repeated.body.transaction.reason, 'Prescription status is Already Dispensed.');
+    const tooMuch = await request(app).post('/api/transactions').send({ ...payload, quantity: 11 }).expect(201);
+    assert.equal(tooMuch.body.transaction.status, 'Blocked');
+    assert.equal(tooMuch.body.transaction.prescriptionStatus, 'Partially Dispensed');
+    assert.equal(tooMuch.body.transaction.reason, 'Dispense quantity exceeds remaining quantity of 10.');
+
+    const remaining = await request(app).post('/api/transactions').send(payload).expect(201);
+    assert.equal(remaining.body.transaction.status, 'Approved');
+    assert.equal(remaining.body.transaction.prescriptionStatus, 'Partially Dispensed');
+
+    const afterFull = await request(app).post('/api/transactions').send({ ...payload, quantity: 1 }).expect(201);
+    assert.equal(afterFull.body.transaction.status, 'Blocked');
+    assert.equal(afterFull.body.transaction.prescriptionStatus, 'Fully Dispensed');
+    assert.equal(afterFull.body.transaction.reason, 'Prescription status is Fully Dispensed.');
   });
 
   it('blocks expired prescriptions', async () => {
@@ -222,7 +255,7 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(response.body.transaction.status, 'Blocked');
-    assert.equal(response.body.transaction.reason, 'Antibiotic does not match prescription antibiotic Amoxicillin.');
+    assert.equal(response.body.transaction.reason, 'Drug does not match prescription drug Amoxicillin.');
   });
 
   it('blocks transactions from the wrong hospital or clinic', async () => {
@@ -266,7 +299,7 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(response.body.transaction.status, 'Blocked');
-    assert.equal(response.body.transaction.reason, 'Requested quantity exceeds prescription limit of 20.');
+    assert.equal(response.body.transaction.reason, 'Dispense quantity exceeds remaining quantity of 20.');
   });
 
   it('blocks transactions that exceed the prescription treatment duration', async () => {
@@ -310,14 +343,15 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(response.body.transaction.status, 'Blocked');
-    assert.equal(response.body.transaction.reason, 'Antibiotic class does not match prescription class Penicillin.');
+    assert.equal(response.body.transaction.reason, 'Drug class does not match prescription class Penicillin.');
   });
 
   it('returns transaction history and clears it', async () => {
     const history = await request(app).get('/api/transactions').expect(200);
 
     assert.ok(history.body.transactions.length >= 10);
-    assert.ok(history.body.transactions.some((transaction) => transaction.prescriptionStatus === 'Already Dispensed'));
+    assert.ok(history.body.transactions.some((transaction) => transaction.prescriptionStatus === 'Fully Dispensed'));
+    assert.ok(history.body.transactions.some((transaction) => transaction.prescriptionStatus === 'Partially Dispensed'));
     assert.ok(history.body.transactions.some((transaction) => transaction.prescriptionStatus === 'Expired'));
 
     await request(app).delete('/api/transactions').expect(200);

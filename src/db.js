@@ -9,37 +9,58 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 const JSON_DB_PATH = path.join(DATA_DIR, 'iadss-db.json');
 
-export const FALLBACK_ANTIBIOTICS = [
+export const FALLBACK_DRUGS = [
   'Amoxicillin',
   'Amoxicillin Clavulanate',
+  'Amlodipine',
   'Ampicillin',
+  'Atorvastatin',
   'Azithromycin',
   'Cefaclor',
   'Cefixime',
   'Ceftriaxone',
   'Cephalexin',
   'Cefuroxime',
+  'Cetirizine',
   'Ciprofloxacin',
   'Clarithromycin',
   'Clindamycin',
   'Cotrimoxazole',
   'Doxycycline',
+  'Ibuprofen',
   'Levofloxacin',
+  'Losartan',
   'Meropenem',
+  'Metformin',
   'Metronidazole',
-  'Nitrofurantoin'
+  'Nitrofurantoin',
+  'Omeprazole',
+  'Paracetamol',
+  'Salbutamol'
 ];
 
-export const DEFAULT_ANTIBIOTIC_CLASSES = [
-  'Penicillin',
-  'Macrolide',
+export const FALLBACK_ANTIBIOTICS = FALLBACK_DRUGS;
+
+export const DEFAULT_DRUG_CLASSES = [
+  'Analgesic',
+  'Antidiabetic',
+  'Antihistamine',
+  'Antihypertensive',
+  'Bronchodilator',
   'Cephalosporin',
   'Fluoroquinolone',
-  'Tetracycline',
-  'Nitroimidazole',
   'Lincosamide',
-  'Sulfonamide'
+  'Macrolide',
+  'Nitroimidazole',
+  'NSAID',
+  'Penicillin',
+  'PPI',
+  'Statin',
+  'Sulfonamide',
+  'Tetracycline',
 ];
+
+export const DEFAULT_ANTIBIOTIC_CLASSES = DEFAULT_DRUG_CLASSES;
 
 const LEGACY_DEMO_PRESCRIPTIONS = [
   {
@@ -93,8 +114,10 @@ const LEGACY_DEMO_PRESCRIPTION_KEYS = [
 
 const PRESCRIPTION_STATUS = {
   VALID: 'Valid',
+  PARTIALLY_DISPENSED: 'Partially Dispensed',
+  FULLY_DISPENSED: 'Fully Dispensed',
   EXPIRED: 'Expired',
-  ALREADY_DISPENSED: 'Already Dispensed'
+  CANCELLED: 'Cancelled'
 };
 
 function normalizeText(value) {
@@ -118,15 +141,56 @@ function getTodayIsoDate() {
 }
 
 function getPrescriptionStatus(prescription) {
-  if (prescription.dispensedAt) {
-    return PRESCRIPTION_STATUS.ALREADY_DISPENSED;
+  if (prescription.cancelledAt) {
+    return PRESCRIPTION_STATUS.CANCELLED;
   }
 
   if (prescription.expiryDate < getTodayIsoDate()) {
     return PRESCRIPTION_STATUS.EXPIRED;
   }
 
+  const quantityLimit = Number(prescription.quantityLimit) || 0;
+  const dispensedQuantity = Number(prescription.dispensedQuantity) || 0;
+
+  if (quantityLimit > 0 && dispensedQuantity >= quantityLimit) {
+    return PRESCRIPTION_STATUS.FULLY_DISPENSED;
+  }
+
+  if (dispensedQuantity > 0) {
+    return PRESCRIPTION_STATUS.PARTIALLY_DISPENSED;
+  }
+
   return PRESCRIPTION_STATUS.VALID;
+}
+
+function withDispensingFields(prescription) {
+  const quantityLimit = Number(prescription.quantityLimit) || 0;
+  const dispensedQuantity = Math.max(0, Number(prescription.dispensedQuantity) || 0);
+  const remainingQuantity = Math.max(quantityLimit - dispensedQuantity, 0);
+
+  return {
+    ...prescription,
+    dispensedAt: prescription.dispensedAt ?? null,
+    cancelledAt: prescription.cancelledAt ?? null,
+    dispensedQuantity,
+    remainingQuantity,
+    prescriptionStatus: getPrescriptionStatus({
+      ...prescription,
+      dispensedQuantity
+    })
+  };
+}
+
+function normalizeReferenceCategory(category) {
+  if (category === 'antibiotics') {
+    return 'drugs';
+  }
+
+  if (category === 'antibioticClasses') {
+    return 'drugClasses';
+  }
+
+  return category;
 }
 
 function createLegacyPrescriptionId(prescription, index) {
@@ -173,7 +237,13 @@ class PostgresDatabase {
         quantity_limit INTEGER NOT NULL,
         treatment_duration_days INTEGER NOT NULL DEFAULT 1,
         expiry_date DATE NOT NULL,
+        main_diagnosis TEXT NOT NULL DEFAULT '',
+        icd10_code TEXT NOT NULL DEFAULT '',
+        clinical_notes TEXT NOT NULL DEFAULT '',
+        drug_allergies TEXT NOT NULL DEFAULT '',
+        dispensed_quantity INTEGER NOT NULL DEFAULT 0,
         dispensed_at TIMESTAMPTZ,
+        cancelled_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
@@ -202,7 +272,18 @@ class PostgresDatabase {
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS antibiotic_class TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dosage TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS treatment_duration_days INTEGER NOT NULL DEFAULT 1;');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS main_diagnosis TEXT NOT NULL DEFAULT \'\';');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS icd10_code TEXT NOT NULL DEFAULT \'\';');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS clinical_notes TEXT NOT NULL DEFAULT \'\';');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS drug_allergies TEXT NOT NULL DEFAULT \'\';');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dispensed_quantity INTEGER NOT NULL DEFAULT 0;');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dispensed_at TIMESTAMPTZ;');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;');
+    await this.pool.query(`
+      UPDATE valid_prescriptions
+      SET dispensed_quantity = quantity_limit
+      WHERE dispensed_at IS NOT NULL AND dispensed_quantity = 0;
+    `);
     await this.pool.query(`
       UPDATE valid_prescriptions
       SET prescription_id = 'RX-LEGACY-' || id::text
@@ -238,8 +319,8 @@ class PostgresDatabase {
 
     await this.removeLegacyDemoPrescriptions();
 
-    await this.seedReferenceItems('antibiotics', FALLBACK_ANTIBIOTICS);
-    await this.seedReferenceItems('antibioticClasses', DEFAULT_ANTIBIOTIC_CLASSES);
+    await this.seedReferenceItems('drugs', FALLBACK_DRUGS);
+    await this.seedReferenceItems('drugClasses', DEFAULT_DRUG_CLASSES);
   }
 
   async removeLegacyDemoPrescriptions() {
@@ -261,8 +342,9 @@ class PostgresDatabase {
   }
 
   async seedReferenceItems(category, values) {
+    const normalizedCategory = normalizeReferenceCategory(category);
     const result = await this.pool.query('SELECT COUNT(*)::int AS count FROM reference_items WHERE category = $1;', [
-      category
+      normalizedCategory
     ]);
 
     if (result.rows[0].count > 0) {
@@ -270,7 +352,7 @@ class PostgresDatabase {
     }
 
     for (const value of values) {
-      await this.addReferenceItem(category, value);
+      await this.addReferenceItem(normalizedCategory, value);
     }
   }
 
@@ -287,10 +369,19 @@ class PostgresDatabase {
         quantity_limit AS "quantityLimit",
         treatment_duration_days AS "treatmentDurationDays",
         expiry_date::text AS "expiryDate",
+        main_diagnosis AS "mainDiagnosis",
+        icd10_code AS "icd10Code",
+        clinical_notes AS "clinicalNotes",
+        drug_allergies AS "drugAllergies",
+        dispensed_quantity AS "dispensedQuantity",
+        GREATEST(quantity_limit - dispensed_quantity, 0) AS "remainingQuantity",
         dispensed_at AS "dispensedAt",
+        cancelled_at AS "cancelledAt",
         CASE
-          WHEN dispensed_at IS NOT NULL THEN 'Already Dispensed'
+          WHEN cancelled_at IS NOT NULL THEN 'Cancelled'
           WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+          WHEN dispensed_quantity >= quantity_limit THEN 'Fully Dispensed'
+          WHEN dispensed_quantity > 0 THEN 'Partially Dispensed'
           ELSE 'Valid'
         END AS "prescriptionStatus"
       FROM valid_prescriptions
@@ -313,9 +404,13 @@ class PostgresDatabase {
           dosage,
           quantity_limit,
           treatment_duration_days,
-          expiry_date
+          expiry_date,
+          main_diagnosis,
+          icd10_code,
+          clinical_notes,
+          drug_allergies
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (prescription_id)
         DO UPDATE SET
           hospital_name = EXCLUDED.hospital_name,
@@ -326,7 +421,11 @@ class PostgresDatabase {
           dosage = EXCLUDED.dosage,
           quantity_limit = EXCLUDED.quantity_limit,
           treatment_duration_days = EXCLUDED.treatment_duration_days,
-          expiry_date = EXCLUDED.expiry_date
+          expiry_date = EXCLUDED.expiry_date,
+          main_diagnosis = EXCLUDED.main_diagnosis,
+          icd10_code = EXCLUDED.icd10_code,
+          clinical_notes = EXCLUDED.clinical_notes,
+          drug_allergies = EXCLUDED.drug_allergies
         RETURNING
           prescription_id AS "prescriptionId",
           patient_id AS "patientId",
@@ -338,10 +437,19 @@ class PostgresDatabase {
           quantity_limit AS "quantityLimit",
           treatment_duration_days AS "treatmentDurationDays",
           expiry_date::text AS "expiryDate",
+          main_diagnosis AS "mainDiagnosis",
+          icd10_code AS "icd10Code",
+          clinical_notes AS "clinicalNotes",
+          drug_allergies AS "drugAllergies",
+          dispensed_quantity AS "dispensedQuantity",
+          GREATEST(quantity_limit - dispensed_quantity, 0) AS "remainingQuantity",
           dispensed_at AS "dispensedAt",
+          cancelled_at AS "cancelledAt",
           CASE
-            WHEN dispensed_at IS NOT NULL THEN 'Already Dispensed'
+            WHEN cancelled_at IS NOT NULL THEN 'Cancelled'
             WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+            WHEN dispensed_quantity >= quantity_limit THEN 'Fully Dispensed'
+            WHEN dispensed_quantity > 0 THEN 'Partially Dispensed'
             ELSE 'Valid'
           END AS "prescriptionStatus";
       `,
@@ -355,7 +463,11 @@ class PostgresDatabase {
         prescription.dosage,
         prescription.quantityLimit,
         prescription.treatmentDurationDays,
-        prescription.expiryDate
+        prescription.expiryDate,
+        prescription.mainDiagnosis,
+        prescription.icd10Code,
+        prescription.clinicalNotes,
+        prescription.drugAllergies
       ]
     );
 
@@ -376,10 +488,19 @@ class PostgresDatabase {
           quantity_limit AS "quantityLimit",
           treatment_duration_days AS "treatmentDurationDays",
           expiry_date::text AS "expiryDate",
+          main_diagnosis AS "mainDiagnosis",
+          icd10_code AS "icd10Code",
+          clinical_notes AS "clinicalNotes",
+          drug_allergies AS "drugAllergies",
+          dispensed_quantity AS "dispensedQuantity",
+          GREATEST(quantity_limit - dispensed_quantity, 0) AS "remainingQuantity",
           dispensed_at AS "dispensedAt",
+          cancelled_at AS "cancelledAt",
           CASE
-            WHEN dispensed_at IS NOT NULL THEN 'Already Dispensed'
+            WHEN cancelled_at IS NOT NULL THEN 'Cancelled'
             WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+            WHEN dispensed_quantity >= quantity_limit THEN 'Fully Dispensed'
+            WHEN dispensed_quantity > 0 THEN 'Partially Dispensed'
             ELSE 'Valid'
           END AS "prescriptionStatus"
         FROM valid_prescriptions
@@ -392,11 +513,27 @@ class PostgresDatabase {
     return result.rows[0] ?? null;
   }
 
-  async markPrescriptionDispensed(prescriptionId) {
+  async addPrescriptionDispense(prescriptionId, quantity) {
     await this.pool.query(
       `
         UPDATE valid_prescriptions
-        SET dispensed_at = COALESCE(dispensed_at, NOW())
+        SET
+          dispensed_quantity = LEAST(quantity_limit, dispensed_quantity + $2),
+          dispensed_at = CASE
+            WHEN dispensed_quantity + $2 >= quantity_limit THEN COALESCE(dispensed_at, NOW())
+            ELSE dispensed_at
+          END
+        WHERE LOWER(prescription_id) = LOWER($1);
+      `,
+      [prescriptionId, quantity]
+    );
+  }
+
+  async cancelPrescription(prescriptionId) {
+    await this.pool.query(
+      `
+        UPDATE valid_prescriptions
+        SET cancelled_at = COALESCE(cancelled_at, NOW())
         WHERE LOWER(prescription_id) = LOWER($1);
       `,
       [prescriptionId]
@@ -485,15 +622,17 @@ class PostgresDatabase {
   }
 
   async getReferenceList(category) {
+    const normalizedCategory = normalizeReferenceCategory(category);
     const result = await this.pool.query(
       'SELECT value FROM reference_items WHERE category = $1 ORDER BY value;',
-      [category]
+      [normalizedCategory]
     );
 
     return result.rows.map((row) => row.value);
   }
 
   async addReferenceItem(category, value) {
+    const normalizedCategory = normalizeReferenceCategory(category);
     const normalizedValue = normalizeText(value);
 
     if (!normalizedValue) {
@@ -503,18 +642,19 @@ class PostgresDatabase {
     await this.pool.query(
       `
         INSERT INTO reference_items (category, value)
-        VALUES ($1, $2)
+          VALUES ($1, $2)
         ON CONFLICT (category, value) DO NOTHING;
       `,
-      [category, normalizedValue]
+      [normalizedCategory, normalizedValue]
     );
 
     return normalizedValue;
   }
 
   async deleteReferenceItem(category, value) {
+    const normalizedCategory = normalizeReferenceCategory(category);
     await this.pool.query('DELETE FROM reference_items WHERE category = $1 AND value = $2;', [
-      category,
+      normalizedCategory,
       normalizeText(value)
     ]);
   }
@@ -602,8 +742,8 @@ class JsonFileDatabase {
       transactions: [],
       medicineCache: {},
       referenceLists: {
-        antibiotics: uniqueSorted(FALLBACK_ANTIBIOTICS),
-        antibioticClasses: uniqueSorted(DEFAULT_ANTIBIOTIC_CLASSES)
+        drugs: uniqueSorted(FALLBACK_DRUGS),
+        drugClasses: uniqueSorted(DEFAULT_DRUG_CLASSES)
       },
       counters: {
         transactions: 1
@@ -629,7 +769,13 @@ class JsonFileDatabase {
 
       const prescriptionWithId = {
         ...prescription,
-        prescriptionId: prescription.prescriptionId || createLegacyPrescriptionId(prescription, index)
+        prescriptionId: prescription.prescriptionId || createLegacyPrescriptionId(prescription, index),
+        mainDiagnosis: prescription.mainDiagnosis ?? '',
+        icd10Code: prescription.icd10Code ?? '',
+        clinicalNotes: prescription.clinicalNotes ?? '',
+        drugAllergies: prescription.drugAllergies ?? '',
+        dispensedQuantity: prescription.dispensedQuantity ?? (prescription.dispensedAt ? prescription.quantityLimit : 0),
+        cancelledAt: prescription.cancelledAt ?? null
       };
 
       if (!prescription.prescriptionId) {
@@ -697,26 +843,32 @@ class JsonFileDatabase {
       changed = true;
     }
 
-    if (!Array.isArray(this.state.referenceLists.antibiotics)) {
-      this.state.referenceLists.antibiotics = uniqueSorted(FALLBACK_ANTIBIOTICS);
+    if (!Array.isArray(this.state.referenceLists.drugs)) {
+      this.state.referenceLists.drugs = uniqueSorted([
+        ...(this.state.referenceLists.antibiotics ?? []),
+        ...FALLBACK_DRUGS
+      ]);
       changed = true;
     }
 
-    if (!Array.isArray(this.state.referenceLists.antibioticClasses)) {
-      this.state.referenceLists.antibioticClasses = uniqueSorted(DEFAULT_ANTIBIOTIC_CLASSES);
+    if (!Array.isArray(this.state.referenceLists.drugClasses)) {
+      this.state.referenceLists.drugClasses = uniqueSorted([
+        ...(this.state.referenceLists.antibioticClasses ?? []),
+        ...DEFAULT_DRUG_CLASSES
+      ]);
       changed = true;
     }
 
-    const normalizedAntibiotics = uniqueSorted(this.state.referenceLists.antibiotics);
-    const normalizedClasses = uniqueSorted(this.state.referenceLists.antibioticClasses);
+    const normalizedDrugs = uniqueSorted(this.state.referenceLists.drugs);
+    const normalizedClasses = uniqueSorted(this.state.referenceLists.drugClasses);
 
-    if (JSON.stringify(normalizedAntibiotics) !== JSON.stringify(this.state.referenceLists.antibiotics)) {
-      this.state.referenceLists.antibiotics = normalizedAntibiotics;
+    if (JSON.stringify(normalizedDrugs) !== JSON.stringify(this.state.referenceLists.drugs)) {
+      this.state.referenceLists.drugs = normalizedDrugs;
       changed = true;
     }
 
-    if (JSON.stringify(normalizedClasses) !== JSON.stringify(this.state.referenceLists.antibioticClasses)) {
-      this.state.referenceLists.antibioticClasses = normalizedClasses;
+    if (JSON.stringify(normalizedClasses) !== JSON.stringify(this.state.referenceLists.drugClasses)) {
+      this.state.referenceLists.drugClasses = normalizedClasses;
       changed = true;
     }
 
@@ -725,11 +877,7 @@ class JsonFileDatabase {
 
   async getPrescriptions() {
     return clone(
-      this.state.validPrescriptions.map((prescription) => ({
-        ...prescription,
-        dispensedAt: prescription.dispensedAt ?? null,
-        prescriptionStatus: getPrescriptionStatus(prescription)
-      }))
+      this.state.validPrescriptions.map((prescription) => withDispensingFields(prescription))
     );
   }
 
@@ -742,12 +890,16 @@ class JsonFileDatabase {
       this.state.validPrescriptions[existingIndex] = {
         ...this.state.validPrescriptions[existingIndex],
         ...prescription,
-        dispensedAt: this.state.validPrescriptions[existingIndex].dispensedAt ?? null
+        dispensedQuantity: this.state.validPrescriptions[existingIndex].dispensedQuantity ?? 0,
+        dispensedAt: this.state.validPrescriptions[existingIndex].dispensedAt ?? null,
+        cancelledAt: this.state.validPrescriptions[existingIndex].cancelledAt ?? null
       };
     } else {
       this.state.validPrescriptions.push({
         ...prescription,
-        dispensedAt: null
+        dispensedQuantity: 0,
+        dispensedAt: null,
+        cancelledAt: null
       });
     }
 
@@ -756,10 +908,7 @@ class JsonFileDatabase {
       ? this.state.validPrescriptions[existingIndex]
       : this.state.validPrescriptions[this.state.validPrescriptions.length - 1];
 
-    return clone({
-      ...saved,
-      prescriptionStatus: getPrescriptionStatus(saved)
-    });
+    return clone(withDispensingFields(saved));
   }
 
   async findPrescriptionById(prescriptionId) {
@@ -771,14 +920,10 @@ class JsonFileDatabase {
       return null;
     }
 
-    return clone({
-      ...prescription,
-      dispensedAt: prescription.dispensedAt ?? null,
-      prescriptionStatus: getPrescriptionStatus(prescription)
-    });
+    return clone(withDispensingFields(prescription));
   }
 
-  async markPrescriptionDispensed(prescriptionId) {
+  async addPrescriptionDispense(prescriptionId, quantity) {
     const prescription = this.state.validPrescriptions.find((item) => {
       return normalizeText(item.prescriptionId).toLowerCase() === normalizeText(prescriptionId).toLowerCase();
     });
@@ -787,7 +932,28 @@ class JsonFileDatabase {
       return;
     }
 
-    prescription.dispensedAt = prescription.dispensedAt ?? new Date().toISOString();
+    prescription.dispensedQuantity = Math.min(
+      Number(prescription.quantityLimit) || 0,
+      (Number(prescription.dispensedQuantity) || 0) + quantity
+    );
+
+    if (prescription.dispensedQuantity >= prescription.quantityLimit) {
+      prescription.dispensedAt = prescription.dispensedAt ?? new Date().toISOString();
+    }
+
+    await this.persist();
+  }
+
+  async cancelPrescription(prescriptionId) {
+    const prescription = this.state.validPrescriptions.find((item) => {
+      return normalizeText(item.prescriptionId).toLowerCase() === normalizeText(prescriptionId).toLowerCase();
+    });
+
+    if (!prescription) {
+      return;
+    }
+
+    prescription.cancelledAt = prescription.cancelledAt ?? new Date().toISOString();
     await this.persist();
   }
 
@@ -828,34 +994,36 @@ class JsonFileDatabase {
   }
 
   async getReferenceList(category) {
-    return clone(this.state.referenceLists?.[category] ?? []);
+    return clone(this.state.referenceLists?.[normalizeReferenceCategory(category)] ?? []);
   }
 
   async addReferenceItem(category, value) {
+    const normalizedCategory = normalizeReferenceCategory(category);
     const normalizedValue = normalizeText(value);
 
     if (!normalizedValue) {
       throw new Error('Reference value is required.');
     }
 
-    if (!this.state.referenceLists[category]) {
-      this.state.referenceLists[category] = [];
+    if (!this.state.referenceLists[normalizedCategory]) {
+      this.state.referenceLists[normalizedCategory] = [];
     }
 
-    this.state.referenceLists[category] = uniqueSorted([...this.state.referenceLists[category], normalizedValue]);
+    this.state.referenceLists[normalizedCategory] = uniqueSorted([...this.state.referenceLists[normalizedCategory], normalizedValue]);
     await this.persist();
 
     return normalizedValue;
   }
 
   async deleteReferenceItem(category, value) {
+    const normalizedCategory = normalizeReferenceCategory(category);
     const normalizedValue = normalizeText(value);
 
-    if (!this.state.referenceLists[category]) {
+    if (!this.state.referenceLists[normalizedCategory]) {
       return;
     }
 
-    this.state.referenceLists[category] = this.state.referenceLists[category].filter((item) => item !== normalizedValue);
+    this.state.referenceLists[normalizedCategory] = this.state.referenceLists[normalizedCategory].filter((item) => item !== normalizedValue);
     await this.persist();
   }
 

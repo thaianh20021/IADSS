@@ -35,7 +35,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -45,6 +46,11 @@ button {
 
 button:active {
   transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .app-header {
@@ -149,6 +155,56 @@ h1 {
   margin: 28px auto 48px;
 }
 
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.role-card {
+  display: grid;
+  gap: 12px;
+  min-height: 220px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 22px;
+  background: #f8fbfe;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: inset 4px 0 0 var(--medical-blue);
+}
+
+.role-card:hover,
+.role-card:focus {
+  border-color: var(--medical-blue);
+  background: #ffffff;
+  box-shadow: inset 4px 0 0 var(--medical-blue), 0 14px 28px rgba(0, 86, 179, 0.13);
+  outline: none;
+}
+
+.role-icon {
+  display: inline-grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--medical-blue);
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.role-card strong {
+  color: var(--medical-blue-dark);
+  font-size: 22px;
+}
+
+.role-card small {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
 .tab-panel {
   display: none;
   background: var(--surface);
@@ -230,7 +286,8 @@ h1 {
 }
 
 .transaction-form input,
-.transaction-form select {
+.transaction-form select,
+.transaction-form textarea {
   min-height: 50px;
   width: 100%;
   border: 1px solid var(--border-strong);
@@ -241,14 +298,89 @@ h1 {
   outline: none;
 }
 
+.transaction-form textarea {
+  min-height: 104px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+.wide-field {
+  grid-column: 1 / -1;
+}
+
 .transaction-form input::placeholder {
   color: #8a98a8;
 }
 
 .transaction-form input:focus,
-.transaction-form select:focus {
+.transaction-form select:focus,
+.transaction-form textarea:focus {
   border-color: var(--medical-blue);
   box-shadow: 0 0 0 3px rgba(114, 168, 232, 0.36);
+}
+
+.transaction-form input[readonly] {
+  background: #f4f7fb;
+  color: var(--muted);
+}
+
+.lookup-card {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  background: #f8fbfe;
+  box-shadow: inset 4px 0 0 var(--teal);
+}
+
+.lookup-card label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.inline-lookup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.inline-lookup input {
+  min-height: 50px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 0 14px;
+}
+
+.prescription-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #c8d8e8;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.prescription-summary.empty {
+  color: var(--muted);
+}
+
+.prescription-summary div {
+  display: grid;
+  gap: 4px;
+}
+
+.prescription-summary strong {
+  color: var(--medical-blue-dark);
+}
+
+.prescription-summary span {
+  color: var(--muted);
 }
 
 .medicine-field {
@@ -564,14 +696,70 @@ tr.blocked-row:hover {
   color: var(--amber);
 }
 
-.status-badge.already-dispensed {
+.status-badge.fully-dispensed,
+.status-badge.cancelled {
   background: var(--danger-bg);
   color: var(--danger-text);
+}
+
+.status-badge.partially-dispensed {
+  background: #e7f4ff;
+  color: var(--medical-blue-dark);
 }
 
 .status-badge.invalid {
   background: #eef2f7;
   color: var(--muted);
+}
+
+.table-button {
+  min-height: 34px;
+  margin: 2px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.print-prescription {
+  display: none;
+  margin-top: 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+}
+
+.print-prescription.ready {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+}
+
+.print-header {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--medical-blue-dark);
+}
+
+.qr-placeholder {
+  display: grid;
+  width: 120px;
+  height: 120px;
+  place-items: center;
+  border: 8px solid var(--text);
+  background:
+    linear-gradient(90deg, transparent 46%, var(--text) 46% 54%, transparent 54%),
+    linear-gradient(transparent 46%, var(--text) 46% 54%, transparent 54%);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.print-prescription p {
+  margin: 0 0 6px;
 }
 
 .empty-cell {
@@ -739,6 +927,11 @@ tr.blocked-row:hover {
     grid-template-columns: 1fr;
   }
 
+  .role-grid,
+  .inline-lookup {
+    grid-template-columns: 1fr;
+  }
+
   .metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -753,6 +946,10 @@ tr.blocked-row:hover {
 
   .settings-form {
     grid-template-columns: 1fr;
+  }
+
+  .wide-field {
+    grid-column: auto;
   }
 
   .primary-button,

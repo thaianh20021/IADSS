@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
 import {
-  FALLBACK_ANTIBIOTICS,
+  FALLBACK_DRUGS,
   createDatabase,
   normalizeInput
 } from './src/db.js';
@@ -12,13 +12,51 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
-const REFERENCE_CATEGORIES = new Set(['antibiotics', 'antibioticClasses']);
+const REFERENCE_CATEGORIES = new Set(['drugs', 'drugClasses', 'antibiotics', 'antibioticClasses']);
 const PRESCRIPTION_STATUS = {
   VALID: 'Valid',
+  PARTIALLY_DISPENSED: 'Partially Dispensed',
+  FULLY_DISPENSED: 'Fully Dispensed',
   EXPIRED: 'Expired',
-  ALREADY_DISPENSED: 'Already Dispensed',
+  CANCELLED: 'Cancelled',
   INVALID: 'Invalid'
 };
+
+function normalizeReferenceCategory(category) {
+  if (category === 'antibiotics') {
+    return 'drugs';
+  }
+
+  if (category === 'antibioticClasses') {
+    return 'drugClasses';
+  }
+
+  return category;
+}
+
+function sanitizePrescriptionForPharmacy(prescription) {
+  if (!prescription) {
+    return null;
+  }
+
+  return {
+    prescriptionId: prescription.prescriptionId,
+    patientId: prescription.patientId,
+    hospitalName: prescription.hospitalName,
+    prescriberLicense: prescription.prescriberLicense,
+    drugName: prescription.antibioticName,
+    antibioticName: prescription.antibioticName,
+    drugClass: prescription.antibioticClass,
+    antibioticClass: prescription.antibioticClass,
+    dosage: prescription.dosage,
+    quantityLimit: prescription.quantityLimit,
+    dispensedQuantity: prescription.dispensedQuantity ?? 0,
+    remainingQuantity: prescription.remainingQuantity ?? prescription.quantityLimit,
+    treatmentDurationDays: prescription.treatmentDurationDays,
+    expiryDate: prescription.expiryDate,
+    prescriptionStatus: prescription.prescriptionStatus
+  };
+}
 
 function isFreshCache(cached) {
   if (!cached?.fetchedAt) {
@@ -53,16 +91,16 @@ function uniqueMedicineResults(results) {
 
 async function fallbackMedicineSearch(db, query) {
   const normalized = query.toLowerCase();
-  const configuredAntibiotics = await db.getReferenceList('antibiotics');
-  const antibiotics = configuredAntibiotics.length > 0 ? configuredAntibiotics : FALLBACK_ANTIBIOTICS;
-  const matches = antibiotics.filter((name) => {
+  const configuredDrugs = await db.getReferenceList('drugs');
+  const drugs = configuredDrugs.length > 0 ? configuredDrugs : FALLBACK_DRUGS;
+  const matches = drugs.filter((name) => {
     return name.toLowerCase().includes(normalized);
   });
 
-  return (matches.length > 0 ? matches : antibiotics).slice(0, 8).map((name) => ({
+  return (matches.length > 0 ? matches : drugs).slice(0, 8).map((name) => ({
     name,
     source: 'fallback',
-    detail: 'Configured antibiotic list'
+    detail: 'Configured drug list'
   }));
 }
 
@@ -195,37 +233,15 @@ async function searchMedicines(db, query) {
 
 function evaluateRequiredFields({
   prescriptionId,
-  patientId,
-  hospitalName,
-  prescriberLicense,
-  antibiotic,
-  antibioticClass,
-  dosage,
-  quantity,
-  treatmentDurationDays
+  quantity
 }) {
-  if (
-    !prescriptionId ||
-    !patientId ||
-    !hospitalName ||
-    !prescriberLicense ||
-    !antibiotic ||
-    !antibioticClass ||
-    !dosage ||
-    !quantity ||
-    !treatmentDurationDays
-  ) {
-    return 'Missing required transaction fields.';
+  if (!prescriptionId || !quantity) {
+    return 'Missing required dispense fields.';
   }
 
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return 'Quantity must be a positive whole number.';
   }
-
-  if (!Number.isInteger(treatmentDurationDays) || treatmentDurationDays <= 0) {
-    return 'Treatment duration must be a positive whole number.';
-  }
-
   return null;
 }
 
@@ -234,22 +250,15 @@ async function evaluateTransaction(db, payload) {
   const patientId = normalizeInput(payload.patientId);
   const hospitalName = normalizeInput(payload.hospitalName);
   const prescriberLicense = normalizeInput(payload.prescriberLicense);
-  const antibiotic = normalizeInput(payload.antibiotic);
-  const antibioticClass = normalizeInput(payload.antibioticClass);
+  const antibiotic = normalizeInput(payload.drugName ?? payload.drug ?? payload.antibiotic);
+  const antibioticClass = normalizeInput(payload.drugClass ?? payload.antibioticClass);
   const dosage = normalizeInput(payload.dosage);
   const quantity = Number(payload.quantity);
   const treatmentDurationDays = Number(payload.treatmentDurationDays);
 
   const missingReason = evaluateRequiredFields({
     prescriptionId,
-    patientId,
-    hospitalName,
-    prescriberLicense,
-    antibiotic,
-    antibioticClass,
-    dosage,
-    quantity,
-    treatmentDurationDays
+    quantity
   });
 
   if (missingReason) {
@@ -270,18 +279,21 @@ async function evaluateTransaction(db, payload) {
   }
 
   const prescription = await db.findPrescriptionById(prescriptionId);
+  const transactionRecord = {
+    prescriptionId,
+    patientId: patientId || prescription?.patientId || '',
+    hospitalName: hospitalName || prescription?.hospitalName || '',
+    prescriberLicense: prescriberLicense || prescription?.prescriberLicense || '',
+    antibiotic: antibiotic || prescription?.antibioticName || '',
+    antibioticClass: antibioticClass || prescription?.antibioticClass || '',
+    dosage: dosage || prescription?.dosage || '',
+    quantity,
+    treatmentDurationDays: Number.isFinite(treatmentDurationDays) ? treatmentDurationDays : prescription?.treatmentDurationDays ?? null
+  };
 
   if (!prescription) {
     return {
-      prescriptionId,
-      patientId,
-      hospitalName,
-      prescriberLicense,
-      antibiotic,
-      antibioticClass,
-      dosage,
-      quantity,
-      treatmentDurationDays,
+      ...transactionRecord,
       prescriptionStatus: PRESCRIPTION_STATUS.INVALID,
       status: 'Blocked',
       reason: 'Prescription ID was not found.'
@@ -290,155 +302,92 @@ async function evaluateTransaction(db, payload) {
 
   if (prescription.prescriptionStatus === PRESCRIPTION_STATUS.EXPIRED) {
     return {
-      prescriptionId,
-      patientId,
-      hospitalName,
-      prescriberLicense,
-      antibiotic,
-      antibioticClass,
-      dosage,
-      quantity,
-      treatmentDurationDays,
+      ...transactionRecord,
       prescriptionStatus: PRESCRIPTION_STATUS.EXPIRED,
       status: 'Blocked',
       reason: 'Prescription status is Expired.'
     };
   }
 
-  if (prescription.prescriptionStatus === PRESCRIPTION_STATUS.ALREADY_DISPENSED) {
+  if (prescription.prescriptionStatus === PRESCRIPTION_STATUS.CANCELLED) {
     return {
-      prescriptionId,
-      patientId,
-      hospitalName,
-      prescriberLicense,
-      antibiotic,
-      antibioticClass,
-      dosage,
-      quantity,
-      treatmentDurationDays,
-      prescriptionStatus: PRESCRIPTION_STATUS.ALREADY_DISPENSED,
+      ...transactionRecord,
+      prescriptionStatus: PRESCRIPTION_STATUS.CANCELLED,
       status: 'Blocked',
-      reason: 'Prescription status is Already Dispensed.'
+      reason: 'Prescription status is Cancelled.'
+    };
+  }
+
+  if (prescription.prescriptionStatus === PRESCRIPTION_STATUS.FULLY_DISPENSED) {
+    return {
+      ...transactionRecord,
+      prescriptionStatus: PRESCRIPTION_STATUS.FULLY_DISPENSED,
+      status: 'Blocked',
+      reason: 'Prescription status is Fully Dispensed.'
     };
   }
 
   if (
-    prescription.patientId !== patientId ||
-    prescription.prescriberLicense !== prescriberLicense ||
-    prescription.hospitalName.toLowerCase() !== hospitalName.toLowerCase()
+    (patientId && prescription.patientId !== patientId) ||
+    (prescriberLicense && prescription.prescriberLicense !== prescriberLicense) ||
+    (hospitalName && prescription.hospitalName.toLowerCase() !== hospitalName.toLowerCase())
   ) {
     return {
-      prescriptionId,
-      patientId,
-      hospitalName,
-      prescriberLicense,
-      antibiotic,
-      antibioticClass,
-      dosage,
-      quantity,
-      treatmentDurationDays,
-      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
+      ...transactionRecord,
+      prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
       reason: 'Patient, hospital, or prescriber does not match prescription record.'
     };
   }
 
-  if (prescription.antibioticName.toLowerCase() !== antibiotic.toLowerCase()) {
+  if (antibiotic && prescription.antibioticName.toLowerCase() !== antibiotic.toLowerCase()) {
     return {
-      prescriptionId,
-      patientId,
-      hospitalName,
-      prescriberLicense,
-      antibiotic,
-      antibioticClass,
-      dosage,
-      quantity,
-      treatmentDurationDays,
-      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
+      ...transactionRecord,
+      prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
-      reason: `Antibiotic does not match prescription antibiotic ${prescription.antibioticName}.`
+      reason: `Drug does not match prescription drug ${prescription.antibioticName}.`
     };
   }
 
-  if (prescription.antibioticClass.toLowerCase() !== antibioticClass.toLowerCase()) {
+  if (antibioticClass && prescription.antibioticClass.toLowerCase() !== antibioticClass.toLowerCase()) {
     return {
-      prescriptionId,
-      patientId,
-      hospitalName,
-      prescriberLicense,
-      antibiotic,
-      antibioticClass,
-      dosage,
-      quantity,
-      treatmentDurationDays,
-      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
+      ...transactionRecord,
+      prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
-      reason: `Antibiotic class does not match prescription class ${prescription.antibioticClass}.`
+      reason: `Drug class does not match prescription class ${prescription.antibioticClass}.`
     };
   }
 
-  if (prescription.dosage.toLowerCase() !== dosage.toLowerCase()) {
+  if (dosage && prescription.dosage.toLowerCase() !== dosage.toLowerCase()) {
     return {
-      prescriptionId,
-      patientId,
-      hospitalName,
-      prescriberLicense,
-      antibiotic,
-      antibioticClass,
-      dosage,
-      quantity,
-      treatmentDurationDays,
-      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
+      ...transactionRecord,
+      prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
       reason: `Dosage does not match prescription dosage ${prescription.dosage}.`
     };
   }
 
-  if (quantity > prescription.quantityLimit) {
+  if (quantity > prescription.remainingQuantity) {
     return {
-      prescriptionId,
-      patientId,
-      hospitalName,
-      prescriberLicense,
-      antibiotic,
-      antibioticClass,
-      dosage,
-      quantity,
-      treatmentDurationDays,
-      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
+      ...transactionRecord,
+      prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
-      reason: `Requested quantity exceeds prescription limit of ${prescription.quantityLimit}.`
+      reason: `Dispense quantity exceeds remaining quantity of ${prescription.remainingQuantity}.`
     };
   }
 
-  if (treatmentDurationDays > prescription.treatmentDurationDays) {
+  if (Number.isFinite(treatmentDurationDays) && treatmentDurationDays > prescription.treatmentDurationDays) {
     return {
-      prescriptionId,
-      patientId,
-      hospitalName,
-      prescriberLicense,
-      antibiotic,
-      antibioticClass,
-      dosage,
-      quantity,
-      treatmentDurationDays,
-      prescriptionStatus: PRESCRIPTION_STATUS.VALID,
+      ...transactionRecord,
+      prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
       reason: `Treatment duration exceeds prescription duration of ${prescription.treatmentDurationDays} days.`
     };
   }
 
   return {
-    prescriptionId,
-    patientId,
-    hospitalName,
-    prescriberLicense,
-    antibiotic,
-    antibioticClass,
-    dosage,
-    quantity,
-    treatmentDurationDays,
-    prescriptionStatus: PRESCRIPTION_STATUS.VALID,
+    ...transactionRecord,
+    prescriptionStatus: prescription.prescriptionStatus,
     status: 'Approved',
     reason: 'Prescription verified.'
   };
@@ -449,12 +398,16 @@ function validatePrescriptionPayload(payload) {
   const patientId = normalizeInput(payload.patientId);
   const hospitalName = normalizeInput(payload.hospitalName);
   const prescriberLicense = normalizeInput(payload.prescriberLicense);
-  const antibioticName = normalizeInput(payload.antibioticName ?? payload.antibiotic);
-  const antibioticClass = normalizeInput(payload.antibioticClass);
+  const antibioticName = normalizeInput(payload.drugName ?? payload.antibioticName ?? payload.drug ?? payload.antibiotic);
+  const antibioticClass = normalizeInput(payload.drugClass ?? payload.antibioticClass);
   const dosage = normalizeInput(payload.dosage);
   const quantityLimit = Number(payload.quantityLimit);
   const treatmentDurationDays = Number(payload.treatmentDurationDays);
   const expiryDate = normalizeInput(payload.expiryDate);
+  const mainDiagnosis = normalizeInput(payload.mainDiagnosis);
+  const icd10Code = normalizeInput(payload.icd10Code);
+  const clinicalNotes = normalizeInput(payload.clinicalNotes);
+  const drugAllergies = normalizeInput(payload.drugAllergies);
 
   if (
     !prescriptionId ||
@@ -502,7 +455,11 @@ function validatePrescriptionPayload(payload) {
       dosage,
       quantityLimit,
       treatmentDurationDays,
-      expiryDate
+      expiryDate,
+      mainDiagnosis,
+      icd10Code,
+      clinicalNotes,
+      drugAllergies
     }
   };
 }
@@ -512,7 +469,7 @@ function validateReferenceCategory(category) {
     return null;
   }
 
-  return category;
+  return normalizeReferenceCategory(category);
 }
 
 export async function createApp(options = {}) {
@@ -542,6 +499,23 @@ export async function createApp(options = {}) {
     }
   });
 
+  app.get('/api/prescriptions/:prescriptionId', async (request, response, next) => {
+    try {
+      const prescription = await db.findPrescriptionById(request.params.prescriptionId);
+
+      if (!prescription) {
+        response.status(404).json({ error: 'Prescription ID was not found.' });
+        return;
+      }
+
+      response.json({
+        prescription: sanitizePrescriptionForPharmacy(prescription)
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post('/api/prescriptions', async (request, response, next) => {
     try {
       const { error, prescription } = validatePrescriptionPayload(request.body ?? {});
@@ -555,6 +529,27 @@ export async function createApp(options = {}) {
       response.status(201).json({
         prescription: saved,
         message: 'Prescription saved. Pharmacies can verify against this record.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/prescriptions/:prescriptionId/cancel', async (request, response, next) => {
+    try {
+      const prescription = await db.findPrescriptionById(request.params.prescriptionId);
+
+      if (!prescription) {
+        response.status(404).json({ error: 'Prescription ID was not found.' });
+        return;
+      }
+
+      await db.cancelPrescription(request.params.prescriptionId);
+      const cancelled = await db.findPrescriptionById(request.params.prescriptionId);
+
+      response.json({
+        prescription: cancelled,
+        message: 'Prescription cancelled.'
       });
     } catch (error) {
       next(error);
@@ -652,7 +647,7 @@ export async function createApp(options = {}) {
       const saved = await db.saveTransaction(evaluated);
 
       if (saved.status === 'Approved') {
-        await db.markPrescriptionDispensed(saved.prescriptionId);
+        await db.addPrescriptionDispense(saved.prescriptionId, saved.quantity);
       }
 
       response.status(201).json({
