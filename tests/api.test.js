@@ -302,6 +302,31 @@ describe('IADSS API', () => {
     assert.equal(response.body.transaction.reason, 'Dispense quantity exceeds remaining quantity of 20.');
   });
 
+  it('records audited overrides without reducing valid remaining quantity', async () => {
+    const prescription = await saveAmoxicillinPrescription({
+      prescriptionId: nextPrescriptionId('RX-OVERRIDE'),
+      quantityLimit: 5
+    });
+
+    const response = await request(app)
+      .post('/api/transactions')
+      .send({
+        prescriptionId: prescription.prescriptionId,
+        quantity: 6,
+        overrideBlocked: true,
+        pharmacistLicense: 'PHARM-999',
+        overrideReason: 'Confirmed dosage change with prescriber by phone.'
+      })
+      .expect(201);
+
+    assert.equal(response.body.transaction.status, 'Overridden');
+    assert.equal(response.body.transaction.pharmacistLicense, 'PHARM-999');
+    assert.equal(response.body.message, 'AUDITED OVERRIDE: Transaction recorded for MOH review.');
+
+    const lookup = await request(app).get(`/api/prescriptions/${prescription.prescriptionId}`).expect(200);
+    assert.equal(lookup.body.prescription.remainingQuantity, 5);
+  });
+
   it('blocks transactions that exceed the prescription treatment duration', async () => {
     const prescription = await saveAmoxicillinPrescription();
 

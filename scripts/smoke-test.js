@@ -136,6 +136,20 @@ async function main() {
   assert(approved.transaction.status === 'Approved', 'Valid transaction was not approved.');
   console.log('OK valid transaction approved');
 
+  const override = await request('/api/transactions', {
+    method: 'POST',
+    body: JSON.stringify({
+      prescriptionId: amoxicillinPrescriptionId,
+      quantity: 11,
+      overrideBlocked: true,
+      pharmacistLicense: 'PHARM-SMOKE',
+      overrideReason: 'Confirmed dose change with prescriber for smoke test.'
+    })
+  });
+  assert(override.transaction.status === 'Overridden', 'Audited override was not recorded.');
+  assert(override.transaction.pharmacistLicense === 'PHARM-SMOKE', 'Override did not store pharmacist license.');
+  console.log('OK audited override recorded');
+
   const blocked = await request('/api/transactions', {
     method: 'POST',
     body: JSON.stringify({
@@ -150,13 +164,15 @@ async function main() {
   const transactions = history.transactions ?? [];
   const approvedCount = transactions.filter((item) => item.status === 'Approved').length;
   const blockedCount = transactions.filter((item) => item.status === 'Blocked').length;
-  const misuseRate = Math.round((blockedCount / transactions.length) * 100);
+  const overrideCount = transactions.filter((item) => item.status === 'Overridden').length;
+  const interventionRate = Math.round(((blockedCount + overrideCount) / transactions.length) * 100);
 
-  assert(transactions.length === 5, `Expected 5 transactions, got ${transactions.length}.`);
+  assert(transactions.length === 6, `Expected 6 transactions, got ${transactions.length}.`);
   assert(approvedCount === 3, `Expected 3 approved transactions, got ${approvedCount}.`);
   assert(blockedCount === 2, `Expected 2 blocked transactions, got ${blockedCount}.`);
-  assert(misuseRate === 40, `Expected misuse rate 40, got ${misuseRate}.`);
-  console.log('OK dashboard data supports 40% misuse rate with blocked attempts');
+  assert(overrideCount === 1, `Expected 1 override transaction, got ${overrideCount}.`);
+  assert(interventionRate === 50, `Expected intervention rate 50, got ${interventionRate}.`);
+  console.log('OK dashboard data supports 50% intervention rate with blocked and overridden attempts');
 
   const medicines = await request('/api/medicines/search?q=cephalexin');
   assert(Array.isArray(medicines.results), 'Medicine search did not return results array.');

@@ -137,6 +137,23 @@
             <input id="treatmentDurationDays" name="treatmentDurationDays" type="number" min="1" step="1" placeholder="Auto-filled after lookup">
           </label>
 
+          <section class="override-card wide-field">
+            <label class="checkbox-line">
+              <input id="overrideBlocked" name="overrideBlocked" type="checkbox">
+              <span>Audited override if this transaction is blocked</span>
+            </label>
+            <div class="override-fields">
+              <label>
+                <span>Pharmacist License</span>
+                <input id="pharmacistLicense" name="pharmacistLicense" type="text" placeholder="Personal pharmacist license">
+              </label>
+              <label>
+                <span>Override Reason</span>
+                <textarea id="overrideReason" name="overrideReason" placeholder="Example: dose change confirmed with prescriber by phone"></textarea>
+              </label>
+            </div>
+          </section>
+
           <div class="form-actions">
             <button class="primary-button" type="submit">Mark as Dispensed</button>
             <span class="lookup-source" id="lookupSource"></span>
@@ -289,8 +306,9 @@
           <div class="metric"><span>Total Attempts</span><strong id="totalMetric">0</strong></div>
           <div class="metric"><span>Approved</span><strong id="approvedMetric">0</strong></div>
           <div class="metric danger-metric"><span>Blocked</span><strong id="blockedMetric">0</strong></div>
-          <div class="metric danger-metric"><span>Blocked Attempt Rate</span><strong id="blockedRateMetric">0%</strong></div>
-          <div class="metric danger-metric"><span>Suspicious Dispensing Rate</span><strong id="suspiciousRateMetric">0%</strong></div>
+          <div class="metric warning-metric"><span>Audited Overrides</span><strong id="overrideMetric">0</strong></div>
+          <div class="metric danger-metric"><span>Intervention Rate</span><strong id="interventionRateMetric">0%</strong></div>
+          <div class="metric danger-metric"><span>Invalid Attempt Rate</span><strong id="invalidAttemptRateMetric">0%</strong></div>
         </div>
 
         <div class="table-wrap">
@@ -307,11 +325,13 @@
                 <th>Rx Status</th>
                 <th>Status</th>
                 <th>Reason</th>
+                <th>Pharmacist</th>
+                <th>Override Reason</th>
               </tr>
             </thead>
             <tbody id="transactionRows">
               <tr>
-                <td colspan="10" class="empty-cell">No transactions recorded.</td>
+                <td colspan="12" class="empty-cell">No transactions recorded.</td>
               </tr>
             </tbody>
           </table>
@@ -355,6 +375,7 @@
               <li>Status must not be Expired, Cancelled, or Fully Dispensed.</li>
               <li>Dispense quantity must be less than or equal to the remaining quantity.</li>
               <li>Partial dispensing is allowed and the remaining quantity is updated.</li>
+              <li>Blocked transactions can only be overridden when a pharmacist enters a personal license and reason.</li>
               <li>Every Approved and Blocked attempt is logged for MOH surveillance.</li>
             </ul>
           </section>

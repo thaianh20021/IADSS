@@ -324,6 +324,34 @@ h1 {
   color: var(--muted);
 }
 
+.override-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #f0d49b;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fffaf0;
+  box-shadow: inset 4px 0 0 var(--amber);
+}
+
+.checkbox-line {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.checkbox-line input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.override-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .lookup-card {
   display: grid;
   gap: 14px;
@@ -537,6 +565,16 @@ h1 {
   color: var(--danger-text);
 }
 
+.warning-metric {
+  background: #fffaf0;
+  border-color: #f0d49b;
+  box-shadow: inset 4px 0 0 var(--amber);
+}
+
+.warning-metric strong {
+  color: var(--amber);
+}
+
 .lookup-source {
   min-height: 20px;
   color: var(--muted);
@@ -565,6 +603,12 @@ h1 {
   background: var(--danger-bg);
   border-color: var(--danger-border);
   color: var(--danger-text);
+}
+
+.alert.warning {
+  background: #fffaf0;
+  border-color: var(--amber);
+  color: #8a5a12;
 }
 
 .table-wrap {
@@ -663,6 +707,14 @@ tr.blocked-row:hover {
   background: #ffe8e8;
 }
 
+tr.overridden-row {
+  background: #fff8e8;
+}
+
+tr.overridden-row:hover {
+  background: #fff0cb;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -684,6 +736,11 @@ tr.blocked-row:hover {
 .status-badge.blocked {
   background: var(--danger-bg);
   color: var(--danger-text);
+}
+
+.status-badge.overridden {
+  background: #fff3d8;
+  color: #8a5a12;
 }
 
 .status-badge.valid {
@@ -760,6 +817,52 @@ tr.blocked-row:hover {
 
 .print-prescription p {
   margin: 0 0 6px;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+    size: A4 portrait;
+  }
+
+  body {
+    min-height: auto;
+    background: #ffffff;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-prescription.ready,
+  .print-prescription.ready * {
+    visibility: visible !important;
+  }
+
+  .print-prescription.ready {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: grid !important;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .print-header {
+    border-bottom: 2px solid #172033;
+    padding-bottom: 12px;
+    font-size: 18px;
+  }
+
+  .qr-placeholder {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }
 
 .empty-cell {
@@ -942,7 +1045,8 @@ tr.blocked-row:hover {
   }
 
   .role-grid,
-  .inline-lookup {
+  .inline-lookup,
+  .override-fields {
     grid-template-columns: 1fr;
   }
 

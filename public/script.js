@@ -16,8 +16,9 @@ const tabPanels = document.querySelectorAll('.tab-panel');
 const totalMetric = document.querySelector('#totalMetric');
 const approvedMetric = document.querySelector('#approvedMetric');
 const blockedMetric = document.querySelector('#blockedMetric');
-const blockedRateMetric = document.querySelector('#blockedRateMetric');
-const suspiciousRateMetric = document.querySelector('#suspiciousRateMetric');
+const overrideMetric = document.querySelector('#overrideMetric');
+const interventionRateMetric = document.querySelector('#interventionRateMetric');
+const invalidAttemptRateMetric = document.querySelector('#invalidAttemptRateMetric');
 const resetTransactionFormButton = document.querySelector('#resetTransactionForm');
 const resetPrescriptionFormButton = document.querySelector('#resetPrescriptionForm');
 const drugListForm = document.querySelector('#drugListForm');
@@ -121,19 +122,22 @@ function updateMetrics(transactions) {
   const total = transactions.length;
   const blocked = transactions.filter((transaction) => transaction.status === 'Blocked').length;
   const approved = transactions.filter((transaction) => transaction.status === 'Approved').length;
-  const suspicious = transactions.filter(isSuspiciousTransaction).length;
-  const blockedRate = total === 0 ? 0 : Math.round((blocked / total) * 100);
-  const suspiciousRate = total === 0 ? 0 : Math.round((suspicious / total) * 100);
+  const overridden = transactions.filter((transaction) => transaction.status === 'Overridden').length;
+  const interventions = blocked + overridden;
+  const invalidAttempts = transactions.filter(isInvalidAttemptTransaction).length;
+  const interventionRate = total === 0 ? 0 : Math.round((interventions / total) * 100);
+  const invalidAttemptRate = total === 0 ? 0 : Math.round((invalidAttempts / total) * 100);
 
   totalMetric.textContent = String(total);
   approvedMetric.textContent = String(approved);
   blockedMetric.textContent = String(blocked);
-  blockedRateMetric.textContent = `${blockedRate}%`;
-  suspiciousRateMetric.textContent = `${suspiciousRate}%`;
+  overrideMetric.textContent = String(overridden);
+  interventionRateMetric.textContent = `${interventionRate}%`;
+  invalidAttemptRateMetric.textContent = `${invalidAttemptRate}%`;
 }
 
-function isSuspiciousTransaction(transaction) {
-  if (transaction.status !== 'Blocked') {
+function isInvalidAttemptTransaction(transaction) {
+  if (!['Blocked', 'Overridden'].includes(transaction.status)) {
     return false;
   }
 
@@ -315,7 +319,7 @@ async function checkHealth() {
 async function loadTransactions() {
   rows.innerHTML = `
     <tr>
-      <td colspan="10" class="empty-cell">Loading transactions...</td>
+      <td colspan="12" class="empty-cell">Loading transactions...</td>
     </tr>
   `;
 
@@ -333,7 +337,7 @@ async function loadTransactions() {
     if (transactions.length === 0) {
       rows.innerHTML = `
         <tr>
-          <td colspan="10" class="empty-cell">No transactions recorded.</td>
+          <td colspan="12" class="empty-cell">No transactions recorded.</td>
         </tr>
       `;
       return;
@@ -342,11 +346,12 @@ async function loadTransactions() {
     rows.innerHTML = transactions
       .map((transaction) => {
         const isBlocked = transaction.status === 'Blocked';
-        const statusClass = isBlocked ? 'blocked' : 'approved';
+        const isOverridden = transaction.status === 'Overridden';
+        const statusClass = isBlocked ? 'blocked' : isOverridden ? 'overridden' : 'approved';
         const prescriptionStatusClass = getStatusClass(transaction.prescriptionStatus);
 
         return `
-          <tr class="${isBlocked ? 'blocked-row' : ''}">
+          <tr class="${isBlocked ? 'blocked-row' : isOverridden ? 'overridden-row' : ''}">
             <td>${escapeHtml(formatTimestamp(transaction.timestamp))}</td>
             <td>${escapeHtml(transaction.prescriptionId || 'N/A')}</td>
             <td>${escapeHtml(transaction.patientId || 'N/A')}</td>
@@ -357,6 +362,8 @@ async function loadTransactions() {
             <td><span class="status-badge ${prescriptionStatusClass}">${escapeHtml(transaction.prescriptionStatus || 'Invalid')}</span></td>
             <td><span class="status-badge ${statusClass}">${escapeHtml(transaction.status)}</span></td>
             <td>${escapeHtml(transaction.reason || 'N/A')}</td>
+            <td>${escapeHtml(transaction.pharmacistLicense || 'N/A')}</td>
+            <td>${escapeHtml(transaction.overrideReason || 'N/A')}</td>
           </tr>
         `;
       })
@@ -365,7 +372,7 @@ async function loadTransactions() {
     updateMetrics([]);
     rows.innerHTML = `
       <tr>
-        <td colspan="10" class="empty-cell">Unable to load transactions.</td>
+        <td colspan="12" class="empty-cell">Unable to load transactions.</td>
       </tr>
     `;
   }
@@ -789,7 +796,10 @@ form.addEventListener('submit', async (event) => {
     drugClass: formData.get('drugClass'),
     dosage: formData.get('dosage'),
     quantity: Number(formData.get('quantity')),
-    treatmentDurationDays: Number(formData.get('treatmentDurationDays'))
+    treatmentDurationDays: Number(formData.get('treatmentDurationDays')),
+    overrideBlocked: formData.get('overrideBlocked') === 'on',
+    pharmacistLicense: formData.get('pharmacistLicense'),
+    overrideReason: formData.get('overrideReason')
   };
 
   try {
@@ -811,6 +821,8 @@ form.addEventListener('submit', async (event) => {
     if (transaction.status === 'Approved') {
       setAlert('success', data.message);
       await loadPrescriptionForPharmacy(transaction.prescriptionId, false);
+    } else if (transaction.status === 'Overridden') {
+      setAlert('warning', data.message, transaction.reason);
     } else {
       setAlert('danger', data.message, transaction.reason);
     }

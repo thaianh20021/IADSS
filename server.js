@@ -429,6 +429,33 @@ async function evaluateTransaction(db, payload) {
   };
 }
 
+function applyAuditedOverride(evaluated, payload) {
+  const overrideRequested = payload.overrideBlocked === true || payload.overrideBlocked === 'true' || payload.overrideBlocked === 'on';
+
+  if (evaluated.status !== 'Blocked' || !overrideRequested) {
+    return evaluated;
+  }
+
+  const overrideReason = normalizeInput(payload.overrideReason);
+  const pharmacistLicense = normalizeInput(payload.pharmacistLicense);
+
+  if (!overrideReason || !pharmacistLicense) {
+    return {
+      ...evaluated,
+      reason: `${evaluated.reason} Override requires a pharmacist license and reason.`
+    };
+  }
+
+  return {
+    ...evaluated,
+    status: 'Overridden',
+    reason: `Blocked rule overridden after pharmacist attestation: ${evaluated.reason}`,
+    overrideReason,
+    pharmacistLicense,
+    overrideAt: new Date().toISOString()
+  };
+}
+
 function validatePrescriptionPayload(payload) {
   const prescriptionId = normalizeInput(payload.prescriptionId);
   const patientId = normalizeInput(payload.patientId);
@@ -679,7 +706,7 @@ export async function createApp(options = {}) {
 
   app.post('/api/transactions', async (request, response, next) => {
     try {
-      const evaluated = await evaluateTransaction(db, request.body ?? {});
+      const evaluated = applyAuditedOverride(await evaluateTransaction(db, request.body ?? {}), request.body ?? {});
       const saved = await db.saveTransaction(evaluated);
 
       if (saved.status === 'Approved') {
@@ -691,6 +718,8 @@ export async function createApp(options = {}) {
         message:
           saved.status === 'Approved'
             ? 'Transaction Approved. Data synced to MOH.'
+            : saved.status === 'Overridden'
+              ? 'AUDITED OVERRIDE: Transaction recorded for MOH review.'
             : 'HIGH RISK ALERT: Invalid Prescription. Sale Blocked.'
       });
     } catch (error) {

@@ -533,8 +533,11 @@ class PostgresDatabase {
         quantity INTEGER,
         treatment_duration_days INTEGER,
         prescription_status TEXT,
-        status TEXT NOT NULL CHECK (status IN ('Approved', 'Blocked')),
-        reason TEXT NOT NULL
+        status TEXT NOT NULL CHECK (status IN ('Approved', 'Blocked', 'Overridden')),
+        reason TEXT NOT NULL,
+        override_reason TEXT,
+        pharmacist_license TEXT,
+        override_at TIMESTAMPTZ
       );
     `);
 
@@ -569,6 +572,15 @@ class PostgresDatabase {
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS dosage TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS treatment_duration_days INTEGER;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS prescription_status TEXT;');
+    await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS override_reason TEXT;');
+    await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS pharmacist_license TEXT;');
+    await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS override_at TIMESTAMPTZ;');
+    await this.pool.query('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_status_check;');
+    await this.pool.query(`
+      ALTER TABLE transactions
+      ADD CONSTRAINT transactions_status_check
+      CHECK (status IN ('Approved', 'Blocked', 'Overridden'));
+    `);
 
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS medicine_cache (
@@ -863,9 +875,12 @@ class PostgresDatabase {
           treatment_duration_days,
           prescription_status,
           status,
-          reason
+          reason,
+          override_reason,
+          pharmacist_license,
+          override_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING
           id,
           timestamp,
@@ -880,7 +895,10 @@ class PostgresDatabase {
           treatment_duration_days AS "treatmentDurationDays",
           prescription_status AS "prescriptionStatus",
           status,
-          reason;
+          reason,
+          override_reason AS "overrideReason",
+          pharmacist_license AS "pharmacistLicense",
+          override_at AS "overrideAt";
       `,
       [
         transaction.prescriptionId,
@@ -894,7 +912,10 @@ class PostgresDatabase {
         transaction.treatmentDurationDays,
         transaction.prescriptionStatus,
         transaction.status,
-        transaction.reason
+        transaction.reason,
+        transaction.overrideReason ?? null,
+        transaction.pharmacistLicense ?? null,
+        transaction.overrideAt ?? null
       ]
     );
 
@@ -917,7 +938,10 @@ class PostgresDatabase {
         treatment_duration_days AS "treatmentDurationDays",
         prescription_status AS "prescriptionStatus",
         status,
-        reason
+        reason,
+        override_reason AS "overrideReason",
+        pharmacist_license AS "pharmacistLicense",
+        override_at AS "overrideAt"
       FROM transactions
       ORDER BY timestamp DESC, id DESC;
     `);
@@ -1296,7 +1320,10 @@ class JsonFileDatabase {
       treatmentDurationDays: transaction.treatmentDurationDays,
       prescriptionStatus: transaction.prescriptionStatus,
       status: transaction.status,
-      reason: transaction.reason
+      reason: transaction.reason,
+      overrideReason: transaction.overrideReason ?? null,
+      pharmacistLicense: transaction.pharmacistLicense ?? null,
+      overrideAt: transaction.overrideAt ?? null
     };
 
     this.state.counters.transactions += 1;

@@ -10,7 +10,8 @@ MVP cho **IADSS (Integrated Drug Dispensing Surveillance System)**, được xâ
 - Trạng thái toa: `Valid`, `Partially Dispensed`, `Fully Dispensed`, `Expired`, `Cancelled`.
 - Cho phép bán từng phần. Nếu nhập số lượng bán ra lớn hơn số lượng còn lại, giao dịch bị block và được ghi vào dashboard.
 - **MOH Dashboard** hiển thị Approved, Blocked và misuse rate.
-- **MOH Dashboard** tách `Blocked Attempt Rate` và `Suspicious Dispensing Rate`.
+- **MOH Dashboard** tách `Intervention Rate` và `Invalid Attempt Rate`.
+- **Audited Override** cho phép dược sĩ bypass giao dịch bị block chỉ khi nhập license cá nhân và lý do, để lại audit trace cho MOH.
 - **Settings** cho thêm/xóa hoặc bulk import danh sách thuốc và nhóm thuốc.
 - Hỗ trợ PostgreSQL qua `DATABASE_URL`; nếu chưa có DB thì dùng JSON local để demo.
 - Tìm thuốc qua openFDA/RxNorm, fallback về danh sách thuốc cấu hình trong Settings.
@@ -67,14 +68,16 @@ Smoke test kiểm tra health, reference lists, doctor-created prescription, phar
 5. Nhà thuốc nhập số lượng bán ra và bấm **Mark as Dispensed**.
 6. Nếu số lượng hợp lệ và toa chưa hết hạn/chưa hủy/chưa bán hết: Approved.
 7. Nếu toa không tồn tại, hết hạn, bị hủy, đã bán hết, hoặc nhập vượt số lượng còn lại: Blocked.
-8. MOH Dashboard ghi nhận cả Approved và Blocked để theo dõi misuse.
+8. Nếu dược sĩ cần bypass block vì lý do ngoại lệ, họ phải nhập license cá nhân và lý do override.
+9. MOH Dashboard ghi nhận Approved, Blocked và Overridden để theo dõi intervention/audit.
 
 ## Misuse Metrics Trong MVP
 
 MVP không thể biết 100% trường hợp nhà thuốc bán ngoài hệ thống. Vì vậy dashboard dùng hai chỉ số thực tế hơn:
 
 - `Blocked Attempt Rate`: số giao dịch bị block / tổng số giao dịch được nhập vào hệ thống.
-- `Suspicious Dispensing Rate`: số lần bị block do toa không tồn tại, toa hết hạn, toa bị hủy, toa đã bán hết, hoặc dispense quantity vượt quá remaining quantity / tổng số giao dịch.
+- `Intervention Rate`: số giao dịch bị block hoặc bị override có audit / tổng số giao dịch.
+- `Invalid Attempt Rate`: số lần bị block hoặc override do toa không tồn tại, toa hết hạn, toa bị hủy, toa đã bán hết, hoặc dispense quantity vượt quá remaining quantity / tổng số giao dịch.
 
 Future enhancement: `Inventory discrepancy detection`, tức là so sánh lượng thuốc nhà thuốc nhập vào, lượng dispense hợp lệ trên hệ thống và tồn kho khai báo. Nếu lượng bán thực tế vượt lượng dispense hợp lệ thì gắn cờ suspicious pharmacy.
 
