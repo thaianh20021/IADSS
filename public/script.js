@@ -3,6 +3,8 @@ const prescriptionForm = document.querySelector('#prescriptionForm');
 const authPanel = document.querySelector('#authPanel');
 const loginForm = document.querySelector('#loginForm');
 const registerForm = document.querySelector('#registerForm');
+const showLoginButton = document.querySelector('#showLoginButton');
+const showRegisterButton = document.querySelector('#showRegisterButton');
 const authAlertArea = document.querySelector('#authAlertArea');
 const userMenu = document.querySelector('#userMenu');
 const currentUserLabel = document.querySelector('#currentUserLabel');
@@ -13,7 +15,9 @@ const settingsAlertArea = document.querySelector('#settingsAlertArea');
 const rows = document.querySelector('#transactionRows');
 const prescriptionRows = document.querySelector('#prescriptionRows');
 const clearDataButton = document.querySelector('#clearDataButton');
+const clearUsersButton = document.querySelector('#clearUsersButton');
 const systemStatus = document.querySelector('#systemStatus');
+const dashboardAlertArea = document.querySelector('#dashboardAlertArea');
 const drugInput = document.querySelector('#drug');
 const medicineOptions = document.querySelector('#medicineOptions');
 const medicineSuggestions = document.querySelector('#medicineSuggestions');
@@ -111,8 +115,25 @@ function setSettingsAlert(type, message, reason = '') {
   renderAlert(settingsAlertArea, type, message, reason);
 }
 
+function setDashboardAlert(type, message, reason = '') {
+  renderAlert(dashboardAlertArea, type, message, reason);
+}
+
 function clearAlert(target) {
   target.innerHTML = '';
+}
+
+function setAuthMode(mode) {
+  const isLogin = mode === 'login';
+  loginForm.hidden = !isLogin;
+  registerForm.hidden = isLogin;
+  loginForm.classList.toggle('active', isLogin);
+  registerForm.classList.toggle('active', !isLogin);
+  showLoginButton.classList.toggle('active', isLogin);
+  showRegisterButton.classList.toggle('active', !isLogin);
+  showLoginButton.setAttribute('aria-selected', String(isLogin));
+  showRegisterButton.setAttribute('aria-selected', String(!isLogin));
+  clearAlert(authAlertArea);
 }
 
 function getAuthHeaders(headers = {}) {
@@ -158,6 +179,7 @@ function showLoggedOut() {
   document.body.classList.add('auth-locked');
   authPanel.hidden = false;
   userMenu.hidden = true;
+  setAuthMode('login');
   applyRoleAccess();
   tabPanels.forEach((panel) => panel.classList.remove('active'));
 }
@@ -832,6 +854,9 @@ document.querySelectorAll('.role-card').forEach((card) => {
   card.addEventListener('click', () => setActiveTab(card.dataset.tab));
 });
 
+showLoginButton.addEventListener('click', () => setAuthMode('login'));
+showRegisterButton.addEventListener('click', () => setAuthMode('register'));
+
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const formData = new FormData(loginForm);
@@ -1181,6 +1206,40 @@ clearDataButton.addEventListener('click', async () => {
     setAlert('danger', 'Unable to clear transaction history.');
   } finally {
     clearDataButton.disabled = false;
+  }
+});
+
+clearUsersButton.addEventListener('click', async () => {
+  const password = window.prompt('Enter reset password to delete all users:');
+
+  if (password === null) {
+    return;
+  }
+
+  clearUsersButton.disabled = true;
+
+  try {
+    const response = await apiFetch('/api/users', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ password })
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Unable to clear users');
+    }
+
+    setDashboardAlert('success', 'All users deleted. Please create a new account to continue.');
+    window.setTimeout(() => {
+      showLoggedOut();
+    }, 900);
+  } catch (error) {
+    setDashboardAlert('danger', 'Unable to clear users.', error.message);
+  } finally {
+    clearUsersButton.disabled = false;
   }
 });
 

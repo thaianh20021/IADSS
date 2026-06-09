@@ -27,7 +27,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. Do not open `public/index.html` directly with `file://`, because auth and API calls require the Express backend. On Render, use the public Render URL.
 
 ## Local Test Checklist
 

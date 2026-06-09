@@ -35,14 +35,22 @@
 
     <main class="app-shell">
       <section class="auth-panel" id="authPanel">
-        <div class="panel-heading">
-          <h2>Sign In To IADSS</h2>
-          <span class="panel-chip">Role-based access</span>
-        </div>
+        <div class="auth-shell">
+          <div class="auth-intro">
+            <span class="panel-chip">Role-based access</span>
+            <h2>IADSS Secure Access</h2>
+            <p>Use your account ID to enter the correct portal for pharmacy dispensing, hospital prescriptions, or MOH surveillance.</p>
+          </div>
 
-        <div class="auth-grid">
-          <form class="auth-card" id="loginForm">
-            <h3>Log In</h3>
+          <div class="auth-card">
+            <div class="auth-switch" role="tablist" aria-label="Authentication mode">
+              <button class="auth-switch-button active" id="showLoginButton" type="button" role="tab" aria-selected="true" aria-controls="loginForm">Log In</button>
+              <button class="auth-switch-button" id="showRegisterButton" type="button" role="tab" aria-selected="false" aria-controls="registerForm">Create Account</button>
+            </div>
+
+            <form class="auth-form active" id="loginForm">
+            <h3>Welcome back</h3>
+            <p class="auth-copy">Log in with your email or username. Pharmacy username is the Pharmacy ID; Doctor username is the Doctor ID.</p>
             <label>
               <span>Email or Username</span>
               <input name="identifier" type="text" placeholder="email@example.com or account ID" autocomplete="username" required>
@@ -54,8 +62,9 @@
             <button class="primary-button" type="submit">Log In</button>
           </form>
 
-          <form class="auth-card" id="registerForm">
+            <form class="auth-form" id="registerForm" hidden>
             <h3>Create Account</h3>
+            <p class="auth-copy">Create one account for the right organization role. The username becomes the role ID shown in the system.</p>
             <label>
               <span>Full Name</span>
               <input name="name" type="text" placeholder="Your name" autocomplete="name" required>
@@ -82,6 +91,7 @@
             </label>
             <button class="primary-button" type="submit">Create Account</button>
           </form>
+          </div>
         </div>
 
         <div class="alert-area" id="authAlertArea" role="status" aria-live="polite"></div>
@@ -360,6 +370,7 @@
             </tbody>
           </table>
         </div>
+
       </section>
 
       <section class="tab-panel" id="dashboardPanel">
@@ -405,6 +416,16 @@
             </tbody>
           </table>
         </div>
+
+        <section class="danger-zone">
+          <div>
+            <h3>User Management</h3>
+            <p>Delete all registered app users and active sessions. Prescriptions and transaction audit logs are kept.</p>
+          </div>
+          <button class="danger-button" id="clearUsersButton" type="button">Clear All Users</button>
+        </section>
+
+        <div class="alert-area" id="dashboardAlertArea" role="status" aria-live="polite"></div>
       </section>
 
       <section class="tab-panel" id="apiDocsPanel">

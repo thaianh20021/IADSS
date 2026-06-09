@@ -55,21 +55,28 @@ function authHeader(role) {
 
 async function registerRole(role) {
   const unique = Date.now();
+  return registerUser(role, `${role}-${unique}`, `${role}-${unique}@iadss.test`);
+}
+
+async function registerUser(role, username, email) {
   const response = await request(app)
     .post('/api/auth/register')
     .send({
       name: `${role} user`,
-      username: `${role}-${unique}`,
-      email: `${role}-${unique}@iadss.test`,
+      username,
+      email,
       password: 'password123',
       role
     })
     .expect(201);
 
-  tokens[role] = response.body.token;
-  users[role] = response.body.user;
-  assert.equal(response.body.user.username, `${role}-${unique}`);
-  return response.body.user;
+  if (!tokens[role]) {
+    tokens[role] = response.body.token;
+    users[role] = response.body.user;
+  }
+
+  assert.equal(response.body.user.username, username);
+  return response.body;
 }
 
 describe('IADSS API', () => {
@@ -206,6 +213,58 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(transaction.body.transaction.status, 'Approved');
+  });
+
+  it('limits doctors to prescriptions created by their own account', async () => {
+    const secondaryId = Date.now();
+    const secondary = await registerUser(
+      'doctor',
+      `doctor-secondary-${secondaryId}`,
+      `doctor-secondary-${secondaryId}@iadss.test`
+    );
+    const ownPrescription = await request(app)
+      .post('/api/prescriptions')
+      .set({ Authorization: `Bearer ${secondary.token}` })
+      .send({
+        prescriptionId: nextPrescriptionId('RX-SECONDARY'),
+        patientId: '88801',
+        hospitalName: 'Secondary Clinic',
+        prescriberLicense: 'DOC-SECOND',
+        antibioticName: 'Azithromycin',
+        antibioticClass: 'Macrolide',
+        dosage: '250mg',
+        quantityLimit: 6,
+        treatmentDurationDays: 3,
+        expiryDate: '2027-12-31'
+      })
+      .expect(201);
+
+    await request(app)
+      .get(`/api/prescriptions/${ownPrescription.body.prescription.prescriptionId}`)
+      .set(authHeader('doctor'))
+      .expect(403);
+
+    await request(app)
+      .post(`/api/prescriptions/${ownPrescription.body.prescription.prescriptionId}/cancel`)
+      .set(authHeader('doctor'))
+      .expect(403);
+
+    const primaryList = await request(app).get('/api/prescriptions').set(authHeader('doctor')).expect(200);
+    assert.equal(
+      primaryList.body.prescriptions.some((item) => item.prescriptionId === ownPrescription.body.prescription.prescriptionId),
+      false
+    );
+
+    const mohList = await request(app).get('/api/prescriptions').set(authHeader('moh')).expect(200);
+    assert.equal(
+      mohList.body.prescriptions.some((item) => item.prescriptionId === ownPrescription.body.prescription.prescriptionId),
+      true
+    );
+
+    await request(app)
+      .post(`/api/prescriptions/${ownPrescription.body.prescription.prescriptionId}/cancel`)
+      .set(authHeader('moh'))
+      .expect(200);
   });
 
   it('generates a QR code image for a prescription ID', async () => {
@@ -484,5 +543,35 @@ describe('IADSS API', () => {
     assert.equal(response.body.source, 'fallback');
     assert.ok(response.body.results.length >= 8);
     assert.ok(response.body.results.some((medicine) => medicine.name === 'Amoxicillin'));
+  });
+
+  it('lets MOH clear all users only with the reset password', async () => {
+    await request(app)
+      .delete('/api/users')
+      .set(authHeader('doctor'))
+      .send({ password: 'thaianh13042002' })
+      .expect(403);
+
+    await request(app)
+      .delete('/api/users')
+      .set(authHeader('moh'))
+      .send({ password: 'wrong-password' })
+      .expect(403);
+
+    await request(app)
+      .get('/api/auth/me')
+      .set(authHeader('moh'))
+      .expect(200);
+
+    await request(app)
+      .delete('/api/users')
+      .set(authHeader('moh'))
+      .send({ password: 'thaianh13042002' })
+      .expect(200);
+
+    await request(app)
+      .get('/api/auth/me')
+      .set(authHeader('moh'))
+      .expect(401);
   });
 });

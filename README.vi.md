@@ -26,7 +26,7 @@ npm install
 npm run dev
 ```
 
-Mở `http://localhost:3000`.
+Mở `http://localhost:3000`. Không mở trực tiếp `public/index.html` bằng `file://`, vì đăng nhập và API cần backend Express. Khi deploy Render thì dùng public Render URL.
 
 ## Checklist Test Local
 

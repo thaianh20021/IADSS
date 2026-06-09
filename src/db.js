@@ -997,6 +997,10 @@ class PostgresDatabase {
     await this.pool.query('DELETE FROM transactions;');
   }
 
+  async clearUsers() {
+    await this.pool.query('TRUNCATE TABLE user_sessions, users RESTART IDENTITY CASCADE;');
+  }
+
   async createUser(user) {
     const result = await this.pool.query(
       `
@@ -1544,6 +1548,13 @@ class JsonFileDatabase {
 
   async clearTransactions() {
     this.state.transactions = [];
+    await this.persist();
+  }
+
+  async clearUsers() {
+    this.state.sessions = [];
+    this.state.users = [];
+    this.state.counters.users = 1;
     await this.persist();
   }
 

@@ -17,6 +17,7 @@ const JSQR_DIST_DIR = path.join(__dirname, 'node_modules', 'jsqr', 'dist');
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const PASSWORD_HASH_ITERATIONS = 120000;
+const USER_RESET_PASSWORD = process.env.USER_RESET_PASSWORD ?? 'thaianh13042002';
 const AUTH_ROLES = new Set(['pharmacy', 'doctor', 'moh']);
 const REFERENCE_CATEGORIES = new Set(['drugs', 'drugClasses', 'antibiotics', 'antibioticClasses']);
 const PRESCRIPTION_STATUS = {
@@ -206,6 +207,10 @@ function sanitizePrescriptionForPharmacy(prescription) {
     expiryDate: prescription.expiryDate,
     prescriptionStatus: prescription.prescriptionStatus
   };
+}
+
+function canManagePrescription(user, prescription) {
+  return user.role === 'moh' || prescription.doctorId === user.username;
 }
 
 function isFreshCache(cached) {
@@ -805,8 +810,11 @@ export async function createApp(options = {}) {
 
   app.get('/api/prescriptions', requireAuth(['doctor', 'moh']), async (request, response, next) => {
     try {
+      const prescriptions = await db.getPrescriptions();
       response.json({
-        prescriptions: await db.getPrescriptions()
+        prescriptions: request.user.role === 'doctor'
+          ? prescriptions.filter((prescription) => prescription.doctorId === request.user.username)
+          : prescriptions
       });
     } catch (error) {
       next(error);
@@ -819,6 +827,11 @@ export async function createApp(options = {}) {
 
       if (!prescription) {
         response.status(404).json({ error: 'Prescription ID was not found.' });
+        return;
+      }
+
+      if (request.user.role === 'doctor' && !canManagePrescription(request.user, prescription)) {
+        response.status(403).json({ error: 'You can only view prescriptions created by your account.' });
         return;
       }
 
@@ -881,6 +894,11 @@ export async function createApp(options = {}) {
 
       if (!prescription) {
         response.status(404).json({ error: 'Prescription ID was not found.' });
+        return;
+      }
+
+      if (!canManagePrescription(request.user, prescription)) {
+        response.status(403).json({ error: 'You can only cancel prescriptions created by your account.' });
         return;
       }
 
@@ -1010,6 +1028,25 @@ export async function createApp(options = {}) {
       await db.clearTransactions();
       response.json({
         ok: true
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/users', requireAuth(['moh']), async (request, response, next) => {
+    try {
+      const password = String(request.body?.password ?? '');
+
+      if (password !== USER_RESET_PASSWORD) {
+        response.status(403).json({ error: 'Invalid reset password.' });
+        return;
+      }
+
+      await db.clearUsers();
+      response.json({
+        ok: true,
+        message: 'All user accounts and sessions were deleted.'
       });
     } catch (error) {
       next(error);

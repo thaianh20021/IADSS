@@ -266,36 +266,94 @@ h1 {
   display: none;
 }
 
-.auth-grid {
+.auth-shell {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(300px, 1fr);
+  gap: clamp(18px, 4vw, 44px);
+  align-items: start;
+}
+
+.auth-intro {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.auth-intro h2 {
+  margin: 0;
+  color: var(--medical-blue-dark);
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.1;
+}
+
+.auth-intro p {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.6;
 }
 
 .auth-card {
   display: grid;
-  gap: 14px;
+  gap: 18px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 18px;
+  padding: clamp(18px, 3vw, 26px);
   background: #f8fbfe;
   box-shadow: inset 4px 0 0 var(--medical-blue);
 }
 
-.auth-card h3 {
-  margin: 0;
-  color: var(--medical-blue-dark);
-  font-size: 20px;
+.auth-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px;
+  background: #ffffff;
 }
 
-.auth-card label {
+.auth-switch-button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.auth-switch-button.active {
+  background: var(--medical-blue);
+  color: #ffffff;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-form h3 {
+  margin: 0;
+  color: var(--medical-blue-dark);
+  font-size: 22px;
+}
+
+.auth-copy {
+  margin: -4px 0 2px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.auth-form label {
   display: grid;
   gap: 8px;
   font-weight: 700;
 }
 
-.auth-card input,
-.auth-card select {
+.auth-form input,
+.auth-form select {
   min-height: 48px;
   width: 100%;
   border: 1px solid var(--border-strong);
@@ -305,8 +363,8 @@ h1 {
   outline: none;
 }
 
-.auth-card input:focus,
-.auth-card select:focus {
+.auth-form input:focus,
+.auth-form select:focus {
   border-color: var(--medical-blue);
   box-shadow: 0 0 0 3px rgba(114, 168, 232, 0.36);
 }
@@ -987,6 +1045,41 @@ tr.overridden-row:hover {
   text-align: center;
 }
 
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 22px;
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  padding: 18px;
+  background: var(--danger-bg);
+}
+
+.danger-zone h3 {
+  margin: 0 0 6px;
+  color: var(--danger-text);
+}
+
+.danger-zone p {
+  margin: 0;
+  color: var(--danger-text);
+}
+
+.danger-button {
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  padding: 11px 14px;
+  background: var(--danger-border);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.danger-button:hover {
+  background: var(--danger-text);
+}
+
 .docs-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1169,7 +1262,7 @@ tr.overridden-row:hover {
   }
 
   .role-grid,
-  .auth-grid,
+  .auth-shell,
   .inline-lookup,
   .override-fields {
     grid-template-columns: 1fr;
