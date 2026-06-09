@@ -6,6 +6,7 @@ MVP cho **IADSS (Integrated Drug Dispensing Surveillance System)**, được xâ
 
 - Màn hình đầu cho chọn vai trò: **Pharmacy**, **Doctor / Hospital**, hoặc **MOH**.
 - Có đăng ký/đăng nhập và phân quyền API theo vai trò: Pharmacy, Doctor / Hospital, MOH.
+- Mỗi tài khoản có `username` duy nhất; với Pharmacy thì `username` chính là `Pharmacy ID`, với Doctor / Hospital thì là `Doctor ID`.
 - **Hospital / Doctor Portal** cho bác sĩ tạo toa thuốc hợp lệ, kèm chẩn đoán cơ bản, ICD-10, ghi chú lâm sàng và dị ứng thuốc.
 - **Pharmacy Portal** cho nhà thuốc nhập hoặc scan `Prescription ID / QR Code`, hệ thống tự tải thuốc, liều dùng, số lượng còn lại.
 - Toa in ra có QR code thật; Pharmacy có thể scan QR bằng camera trên Chrome/Safari. Chrome dùng native `BarcodeDetector` nếu có, Safari dùng fallback `jsQR`. Khi camera không khả dụng vẫn có thể nhập ID thủ công.
@@ -29,7 +30,7 @@ Mở `http://localhost:3000`.
 
 ## Checklist Test Local
 
-1. Tạo 3 tài khoản test: một tài khoản **Doctor / Hospital**, một tài khoản **Pharmacy**, và một tài khoản **MOH**.
+1. Tạo 3 tài khoản test: một tài khoản **Doctor / Hospital**, một tài khoản **Pharmacy**, và một tài khoản **MOH**. Ví dụ username `doctor-demo-001`, `pharma-demo-001`, `moh-demo-001`; username này chính là ID theo role.
 2. Đăng nhập bằng tài khoản **Doctor / Hospital**, rồi mở **Hospital / Doctor Portal**.
 3. Tạo một toa thuốc:
    - Prescription ID: `RX-2026-0001`
@@ -61,7 +62,7 @@ Chạy smoke test tự động:
 npm run smoke
 ```
 
-Smoke test kiểm tra health, đăng ký/đăng nhập, phân quyền API theo role, reference lists, doctor-created prescription, pharmacy lookup privacy, partial dispensing, block khi vượt remaining quantity, dashboard intervention rate và medicine lookup.
+Smoke test kiểm tra health, đăng ký/đăng nhập, username-based role ID, phân quyền API theo role, reference lists, doctor-created prescription, pharmacy lookup privacy, partial dispensing, block khi vượt remaining quantity, dashboard intervention rate và medicine lookup.
 
 ## Flow Hospital-To-Pharmacy
 

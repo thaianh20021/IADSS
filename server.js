@@ -59,13 +59,30 @@ function sanitizeUser(user) {
     return null;
   }
 
-  return {
+  const accountId = user.username;
+  const sanitized = {
     id: user.id,
+    username: user.username,
+    accountId,
     name: user.name,
     email: user.email,
     role: user.role,
     createdAt: user.createdAt
   };
+
+  if (user.role === 'pharmacy') {
+    sanitized.pharmacyId = accountId;
+  }
+
+  if (user.role === 'doctor') {
+    sanitized.doctorId = accountId;
+  }
+
+  if (user.role === 'moh') {
+    sanitized.mohId = accountId;
+  }
+
+  return sanitized;
 }
 
 function hashPassword(password) {
@@ -106,12 +123,18 @@ function getBearerToken(request) {
 }
 
 function validateAuthPayload(payload, mode) {
+  const identifier = normalizeInput(payload.identifier ?? payload.email ?? payload.username).toLowerCase();
   const email = normalizeInput(payload.email).toLowerCase();
   const password = String(payload.password ?? '');
   const name = normalizeInput(payload.name);
   const role = normalizeInput(payload.role).toLowerCase();
+  const username = normalizeInput(payload.username).toLowerCase();
 
-  if (!email || !email.includes('@')) {
+  if (mode === 'login') {
+    if (!identifier) {
+      return { error: 'Email or username is required.' };
+    }
+  } else if (!email || !email.includes('@')) {
     return { error: 'Valid email is required.' };
   }
 
@@ -124,6 +147,10 @@ function validateAuthPayload(payload, mode) {
       return { error: 'Full name is required.' };
     }
 
+    if (!username || !/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) {
+      return { error: 'Username must be 3-32 characters and use letters, numbers, dots, underscores, or hyphens.' };
+    }
+
     if (!AUTH_ROLES.has(role)) {
       return { error: 'Role must be pharmacy, doctor, or moh.' };
     }
@@ -131,10 +158,12 @@ function validateAuthPayload(payload, mode) {
 
   return {
     userInput: {
+      identifier,
       email,
       password,
       name,
-      role
+      role,
+      username
     }
   };
 }
@@ -161,6 +190,7 @@ function sanitizePrescriptionForPharmacy(prescription) {
 
   return {
     prescriptionId: prescription.prescriptionId,
+    doctorId: prescription.doctorId,
     patientId: prescription.patientId,
     hospitalName: prescription.hospitalName,
     prescriberLicense: prescription.prescriberLicense,
@@ -698,15 +728,22 @@ export async function createApp(options = {}) {
         return;
       }
 
-      const existingUser = await db.findUserByEmail(userInput.email);
+      const existingEmail = await db.findUserByEmail(userInput.email);
+      const existingUsername = await db.findUserByUsername(userInput.username);
 
-      if (existingUser) {
+      if (existingEmail) {
         response.status(409).json({ error: 'An account with this email already exists.' });
+        return;
+      }
+
+      if (existingUsername) {
+        response.status(409).json({ error: 'An account with this username already exists.' });
         return;
       }
 
       const user = await db.createUser({
         name: userInput.name,
+        username: userInput.username,
         email: userInput.email,
         role: userInput.role,
         passwordHash: hashPassword(userInput.password)
@@ -732,7 +769,7 @@ export async function createApp(options = {}) {
         return;
       }
 
-      const user = await db.findUserByEmail(userInput.email);
+      const user = await db.findUserByIdentifier(userInput.identifier);
 
       if (!user || !verifyPassword(userInput.password, user.passwordHash)) {
         response.status(401).json({ error: 'Invalid email or password.' });
@@ -825,7 +862,10 @@ export async function createApp(options = {}) {
         return;
       }
 
-      const saved = await db.savePrescription(prescription);
+      const saved = await db.savePrescription({
+        ...prescription,
+        doctorId: request.user.username
+      });
       response.status(201).json({
         prescription: saved,
         message: 'Prescription saved. Pharmacies can verify against this record.'
@@ -944,6 +984,7 @@ export async function createApp(options = {}) {
   app.post('/api/transactions', requireAuth(['pharmacy']), async (request, response, next) => {
     try {
       const evaluated = applyAuditedOverride(await evaluateTransaction(db, request.body ?? {}), request.body ?? {});
+      evaluated.pharmacyId = request.user.username;
       const saved = await db.saveTransaction(evaluated);
 
       if (saved.status === 'Approved') {

@@ -499,6 +499,7 @@ class PostgresDatabase {
       CREATE TABLE IF NOT EXISTS valid_prescriptions (
         id SERIAL PRIMARY KEY,
         prescription_id TEXT NOT NULL UNIQUE,
+        doctor_id TEXT,
         patient_id TEXT NOT NULL,
         hospital_name TEXT NOT NULL DEFAULT '',
         prescriber_license TEXT NOT NULL,
@@ -524,6 +525,7 @@ class PostgresDatabase {
         id SERIAL PRIMARY KEY,
         timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         prescription_id TEXT,
+        pharmacy_id TEXT,
         patient_id TEXT,
         hospital_name TEXT,
         prescriber_license TEXT,
@@ -542,6 +544,7 @@ class PostgresDatabase {
     `);
 
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS prescription_id TEXT;');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS doctor_id TEXT;');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS hospital_name TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS antibiotic_class TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dosage TEXT NOT NULL DEFAULT \'\';');
@@ -567,6 +570,7 @@ class PostgresDatabase {
     await this.pool.query('ALTER TABLE valid_prescriptions DROP CONSTRAINT IF EXISTS valid_prescriptions_patient_id_prescriber_license_antibiotic_name_key;');
     await this.pool.query('CREATE UNIQUE INDEX IF NOT EXISTS valid_prescriptions_prescription_id_key ON valid_prescriptions (prescription_id);');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS prescription_id TEXT;');
+    await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS pharmacy_id TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS hospital_name TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS antibiotic_class TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS dosage TEXT;');
@@ -610,6 +614,7 @@ class PostgresDatabase {
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE,
         name TEXT NOT NULL,
         email TEXT NOT NULL UNIQUE,
         role TEXT NOT NULL CHECK (role IN ('pharmacy', 'doctor', 'moh')),
@@ -617,6 +622,15 @@ class PostgresDatabase {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+
+    await this.pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;');
+    await this.pool.query(`
+      UPDATE users
+      SET username = 'user-' || id::text
+      WHERE username IS NULL OR username = '';
+    `);
+    await this.pool.query('ALTER TABLE users ALTER COLUMN username SET NOT NULL;');
+    await this.pool.query('CREATE UNIQUE INDEX IF NOT EXISTS users_username_key ON users (username);');
 
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS user_sessions (
@@ -700,6 +714,7 @@ class PostgresDatabase {
     const result = await this.pool.query(`
       SELECT
         prescription_id AS "prescriptionId",
+        doctor_id AS "doctorId",
         patient_id AS "patientId",
         hospital_name AS "hospitalName",
         prescriber_license AS "prescriberLicense",
@@ -736,6 +751,7 @@ class PostgresDatabase {
       `
         INSERT INTO valid_prescriptions (
           prescription_id,
+          doctor_id,
           patient_id,
           hospital_name,
           prescriber_license,
@@ -750,9 +766,10 @@ class PostgresDatabase {
           clinical_notes,
           drug_allergies
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         ON CONFLICT (prescription_id)
         DO UPDATE SET
+          doctor_id = EXCLUDED.doctor_id,
           hospital_name = EXCLUDED.hospital_name,
           patient_id = EXCLUDED.patient_id,
           prescriber_license = EXCLUDED.prescriber_license,
@@ -768,6 +785,7 @@ class PostgresDatabase {
           drug_allergies = EXCLUDED.drug_allergies
         RETURNING
           prescription_id AS "prescriptionId",
+          doctor_id AS "doctorId",
           patient_id AS "patientId",
           hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
@@ -795,6 +813,7 @@ class PostgresDatabase {
       `,
       [
         prescription.prescriptionId,
+        prescription.doctorId ?? null,
         prescription.patientId,
         prescription.hospitalName,
         prescription.prescriberLicense,
@@ -819,6 +838,7 @@ class PostgresDatabase {
       `
         SELECT
           prescription_id AS "prescriptionId",
+          doctor_id AS "doctorId",
           patient_id AS "patientId",
           hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
@@ -885,6 +905,7 @@ class PostgresDatabase {
       `
         INSERT INTO transactions (
           prescription_id,
+          pharmacy_id,
           patient_id,
           hospital_name,
           prescriber_license,
@@ -900,11 +921,12 @@ class PostgresDatabase {
           pharmacist_license,
           override_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING
           id,
           timestamp,
           prescription_id AS "prescriptionId",
+          pharmacy_id AS "pharmacyId",
           patient_id AS "patientId",
           hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
@@ -922,6 +944,7 @@ class PostgresDatabase {
       `,
       [
         transaction.prescriptionId,
+        transaction.pharmacyId ?? null,
         transaction.patientId,
         transaction.hospitalName,
         transaction.prescriberLicense,
@@ -948,6 +971,7 @@ class PostgresDatabase {
         id,
         timestamp,
         prescription_id AS "prescriptionId",
+        pharmacy_id AS "pharmacyId",
         patient_id AS "patientId",
         hospital_name AS "hospitalName",
         prescriber_license AS "prescriberLicense",
@@ -976,16 +1000,17 @@ class PostgresDatabase {
   async createUser(user) {
     const result = await this.pool.query(
       `
-        INSERT INTO users (name, email, role, password_hash)
-        VALUES ($1, LOWER($2), $3, $4)
+        INSERT INTO users (username, name, email, role, password_hash)
+        VALUES (LOWER($1), $2, LOWER($3), $4, $5)
         RETURNING
           id,
+          username,
           name,
           email,
           role,
           created_at AS "createdAt";
       `,
-      [user.name, user.email, user.role, user.passwordHash]
+      [user.username, user.name, user.email, user.role, user.passwordHash]
     );
 
     return result.rows[0];
@@ -996,6 +1021,7 @@ class PostgresDatabase {
       `
         SELECT
           id,
+          username,
           name,
           email,
           role,
@@ -1006,6 +1032,48 @@ class PostgresDatabase {
         LIMIT 1;
       `,
       [email]
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async findUserByUsername(username) {
+    const result = await this.pool.query(
+      `
+        SELECT
+          id,
+          username,
+          name,
+          email,
+          role,
+          password_hash AS "passwordHash",
+          created_at AS "createdAt"
+        FROM users
+        WHERE username = LOWER($1)
+        LIMIT 1;
+      `,
+      [username]
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async findUserByIdentifier(identifier) {
+    const result = await this.pool.query(
+      `
+        SELECT
+          id,
+          username,
+          name,
+          email,
+          role,
+          password_hash AS "passwordHash",
+          created_at AS "createdAt"
+        FROM users
+        WHERE email = LOWER($1) OR username = LOWER($1)
+        LIMIT 1;
+      `,
+      [identifier]
     );
 
     return result.rows[0] ?? null;
@@ -1026,6 +1094,7 @@ class PostgresDatabase {
       `
         SELECT
           u.id,
+          u.username,
           u.name,
           u.email,
           u.role,
@@ -1277,6 +1346,13 @@ class JsonFileDatabase {
       changed = true;
     }
 
+    this.state.users.forEach((user) => {
+      if (!user.username) {
+        user.username = `user-${user.id}`;
+        changed = true;
+      }
+    });
+
     return changed;
   }
 
@@ -1436,6 +1512,7 @@ class JsonFileDatabase {
       id: this.state.counters.transactions,
       timestamp: new Date().toISOString(),
       prescriptionId: transaction.prescriptionId,
+      pharmacyId: transaction.pharmacyId ?? null,
       patientId: transaction.patientId,
       hospitalName: transaction.hospitalName,
       prescriberLicense: transaction.prescriberLicense,
@@ -1474,6 +1551,7 @@ class JsonFileDatabase {
     const normalizedEmail = normalizeText(user.email).toLowerCase();
     const saved = {
       id: this.state.counters.users,
+      username: normalizeText(user.username).toLowerCase(),
       name: normalizeText(user.name),
       email: normalizedEmail,
       role: user.role,
@@ -1487,6 +1565,7 @@ class JsonFileDatabase {
 
     return clone({
       id: saved.id,
+      username: saved.username,
       name: saved.name,
       email: saved.email,
       role: saved.role,
@@ -1497,6 +1576,20 @@ class JsonFileDatabase {
   async findUserByEmail(email) {
     const normalizedEmail = normalizeText(email).toLowerCase();
     const user = this.state.users.find((item) => item.email === normalizedEmail);
+    return user ? clone(user) : null;
+  }
+
+  async findUserByUsername(username) {
+    const normalizedUsername = normalizeText(username).toLowerCase();
+    const user = this.state.users.find((item) => item.username === normalizedUsername);
+    return user ? clone(user) : null;
+  }
+
+  async findUserByIdentifier(identifier) {
+    const normalizedIdentifier = normalizeText(identifier).toLowerCase();
+    const user = this.state.users.find((item) => {
+      return item.email === normalizedIdentifier || item.username === normalizedIdentifier;
+    });
     return user ? clone(user) : null;
   }
 
@@ -1528,6 +1621,7 @@ class JsonFileDatabase {
 
     return clone({
       id: user.id,
+      username: user.username,
       name: user.name,
       email: user.email,
       role: user.role,

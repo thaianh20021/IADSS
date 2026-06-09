@@ -14,6 +14,7 @@ let app;
 let db;
 let prescriptionCounter = 1;
 const tokens = {};
+const users = {};
 
 function nextPrescriptionId(prefix = 'RX-TEST') {
   const id = `${prefix}-${String(prescriptionCounter).padStart(3, '0')}`;
@@ -53,17 +54,21 @@ function authHeader(role) {
 }
 
 async function registerRole(role) {
+  const unique = Date.now();
   const response = await request(app)
     .post('/api/auth/register')
     .send({
       name: `${role} user`,
-      email: `${role}-${Date.now()}@iadss.test`,
+      username: `${role}-${unique}`,
+      email: `${role}-${unique}@iadss.test`,
       password: 'password123',
       role
     })
     .expect(201);
 
   tokens[role] = response.body.token;
+  users[role] = response.body.user;
+  assert.equal(response.body.user.username, `${role}-${unique}`);
   return response.body.user;
 }
 
@@ -102,12 +107,23 @@ describe('IADSS API', () => {
   it('requires login for protected endpoints and exposes the current user', async () => {
     await request(app).get('/api/transactions').expect(401);
 
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({
+        identifier: users.pharmacy.username,
+        password: 'password123'
+      })
+      .expect(200);
+
+    assert.equal(login.body.user.pharmacyId, users.pharmacy.username);
+
     const me = await request(app)
       .get('/api/auth/me')
       .set(authHeader('moh'))
       .expect(200);
 
     assert.equal(me.body.user.role, 'moh');
+    assert.equal(me.body.user.mohId, me.body.user.username);
   });
 
   it('blocks authenticated users from portals outside their role', async () => {
@@ -136,11 +152,13 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(response.body.transaction.status, 'Approved');
+    assert.equal(response.body.transaction.pharmacyId, users.pharmacy.username);
     assert.equal(response.body.transaction.prescriptionStatus, 'Valid');
     assert.equal(response.body.message, 'Transaction Approved. Data synced to MOH.');
 
     const prescriptions = await request(app).get('/api/prescriptions').set(authHeader('doctor')).expect(200);
     const dispensed = prescriptions.body.prescriptions.find((item) => item.prescriptionId === prescription.prescriptionId);
+    assert.equal(dispensed.doctorId, users.doctor.username);
     assert.equal(dispensed.prescriptionStatus, 'Partially Dispensed');
     assert.equal(dispensed.dispensedQuantity, 10);
     assert.equal(dispensed.remainingQuantity, 10);

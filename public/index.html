@@ -44,8 +44,8 @@
           <form class="auth-card" id="loginForm">
             <h3>Log In</h3>
             <label>
-              <span>Email</span>
-              <input name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+              <span>Email or Username</span>
+              <input name="identifier" type="text" placeholder="email@example.com or account ID" autocomplete="username" required>
             </label>
             <label>
               <span>Password</span>
@@ -59,6 +59,10 @@
             <label>
               <span>Full Name</span>
               <input name="name" type="text" placeholder="Your name" autocomplete="name" required>
+            </label>
+            <label>
+              <span>Username / Account ID</span>
+              <input name="username" type="text" placeholder="e.g. pharma-hcm-001 or doctor-nt-001" autocomplete="username" required>
             </label>
             <label>
               <span>Email</span>
@@ -335,6 +339,7 @@
             <thead>
               <tr>
                 <th>Prescription ID</th>
+                <th>Doctor ID</th>
                 <th>Patient ID</th>
                 <th>Hospital / Clinic</th>
                 <th>Prescriber</th>
@@ -350,7 +355,7 @@
             </thead>
             <tbody id="prescriptionRows">
               <tr>
-                <td colspan="12" class="empty-cell">Loading prescriptions...</td>
+                <td colspan="13" class="empty-cell">Loading prescriptions...</td>
               </tr>
             </tbody>
           </table>
@@ -379,6 +384,7 @@
             <thead>
               <tr>
                 <th>Timestamp</th>
+                <th>Pharmacy ID</th>
                 <th>Prescription ID</th>
                 <th>Patient ID</th>
                 <th>Hospital / Clinic</th>
@@ -394,7 +400,7 @@
             </thead>
             <tbody id="transactionRows">
               <tr>
-                <td colspan="12" class="empty-cell">No transactions recorded.</td>
+                <td colspan="13" class="empty-cell">No transactions recorded.</td>
               </tr>
             </tbody>
           </table>

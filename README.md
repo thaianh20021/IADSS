@@ -8,6 +8,7 @@ Vietnamese version: [README.vi.md](README.vi.md)
 
 - Role selector for Pharmacy, Hospital / Doctor, and MOH users.
 - Registration and login with role-based API access for Pharmacy, Doctor / Hospital, and MOH accounts.
+- Each account has a unique username; for Pharmacy accounts this is the Pharmacy ID, and for Doctor / Hospital accounts this is the Doctor ID.
 - Pharmacy Portal that loads a prescription by ID / QR code before dispensing.
 - Hospital / Doctor Portal for creating valid prescription records with diagnosis fields.
 - Prescription validation against prescriptions entered through the Hospital / Doctor Portal.
@@ -30,7 +31,7 @@ Open `http://localhost:3000`.
 
 ## Local Test Checklist
 
-1. Create one Doctor / Hospital account, one Pharmacy account, and one MOH account from the sign-in screen.
+1. Create one Doctor / Hospital account, one Pharmacy account, and one MOH account from the sign-in screen. Use usernames such as `doctor-demo-001`, `pharma-demo-001`, and `moh-demo-001`; these become the role IDs.
 2. Log in as the Doctor / Hospital account and open the Hospital / Doctor Portal tab.
 3. Create a prescription:
    - Prescription ID: `RX-2026-0001`
@@ -64,7 +65,7 @@ You can also run the automated smoke test:
 npm run smoke
 ```
 
-The smoke test verifies health, registration/login, role-scoped API access, reference lists, doctor-created prescriptions, pharmacy lookup privacy, partial dispensing, over-remaining blocks, transaction history, intervention rate, and medicine lookup.
+The smoke test verifies health, registration/login, username-based role IDs, role-scoped API access, reference lists, doctor-created prescriptions, pharmacy lookup privacy, partial dispensing, over-remaining blocks, transaction history, intervention rate, and medicine lookup.
 
 ## Render Deployment
 

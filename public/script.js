@@ -167,7 +167,12 @@ function showLoggedIn(user) {
   document.body.classList.remove('auth-locked');
   authPanel.hidden = true;
   userMenu.hidden = false;
-  currentUserLabel.textContent = `${user.name} (${user.role})`;
+  const roleIdLabel = user.role === 'pharmacy'
+    ? `Pharmacy ID: ${user.pharmacyId}`
+    : user.role === 'doctor'
+      ? `Doctor ID: ${user.doctorId}`
+      : `MOH ID: ${user.mohId}`;
+  currentUserLabel.textContent = `${user.name} (${roleIdLabel})`;
   applyRoleAccess();
   setActiveTab(defaultTabByRole[user.role] ?? 'rolePanel');
 }
@@ -438,7 +443,7 @@ async function loadTransactions() {
     if (transactions.length === 0) {
       rows.innerHTML = `
         <tr>
-          <td colspan="12" class="empty-cell">No transactions recorded.</td>
+          <td colspan="13" class="empty-cell">No transactions recorded.</td>
         </tr>
       `;
       return;
@@ -454,6 +459,7 @@ async function loadTransactions() {
         return `
           <tr class="${isBlocked ? 'blocked-row' : isOverridden ? 'overridden-row' : ''}">
             <td>${escapeHtml(formatTimestamp(transaction.timestamp))}</td>
+            <td>${escapeHtml(transaction.pharmacyId || 'N/A')}</td>
             <td>${escapeHtml(transaction.prescriptionId || 'N/A')}</td>
             <td>${escapeHtml(transaction.patientId || 'N/A')}</td>
             <td>${escapeHtml(transaction.hospitalName || 'N/A')}</td>
@@ -473,7 +479,7 @@ async function loadTransactions() {
     updateMetrics([]);
     rows.innerHTML = `
       <tr>
-        <td colspan="12" class="empty-cell">Unable to load transactions.</td>
+        <td colspan="13" class="empty-cell">Unable to load transactions.</td>
       </tr>
     `;
   }
@@ -482,7 +488,7 @@ async function loadTransactions() {
 async function loadPrescriptions() {
   prescriptionRows.innerHTML = `
     <tr>
-      <td colspan="12" class="empty-cell">Loading prescriptions...</td>
+      <td colspan="13" class="empty-cell">Loading prescriptions...</td>
     </tr>
   `;
 
@@ -499,7 +505,7 @@ async function loadPrescriptions() {
     if (prescriptions.length === 0) {
       prescriptionRows.innerHTML = `
         <tr>
-          <td colspan="12" class="empty-cell">No prescriptions saved.</td>
+          <td colspan="13" class="empty-cell">No prescriptions saved.</td>
         </tr>
       `;
       return;
@@ -513,6 +519,7 @@ async function loadPrescriptions() {
         return `
           <tr>
             <td>${escapeHtml(prescription.prescriptionId)}</td>
+            <td>${escapeHtml(prescription.doctorId || 'N/A')}</td>
             <td>${escapeHtml(prescription.patientId)}</td>
             <td>${escapeHtml(prescription.hospitalName)}</td>
             <td>${escapeHtml(prescription.prescriberLicense)}</td>
@@ -534,7 +541,7 @@ async function loadPrescriptions() {
   } catch (error) {
     prescriptionRows.innerHTML = `
       <tr>
-        <td colspan="12" class="empty-cell">Unable to load prescriptions.</td>
+        <td colspan="13" class="empty-cell">Unable to load prescriptions.</td>
       </tr>
     `;
   }
@@ -740,6 +747,7 @@ function renderPrintPrescription(prescription) {
   qrImage.alt = `QR code for prescription ${prescription.prescriptionId}`;
   printPrescriptionDetails.innerHTML = `
     <p><strong>Patient ID:</strong> ${escapeHtml(prescription.patientId)}</p>
+    <p><strong>Doctor ID:</strong> ${escapeHtml(prescription.doctorId || 'N/A')}</p>
     <p><strong>Hospital:</strong> ${escapeHtml(prescription.hospitalName)}</p>
     <p><strong>Prescriber:</strong> ${escapeHtml(prescription.prescriberLicense)}</p>
     <p><strong>Drug:</strong> ${escapeHtml(prescription.antibioticName ?? prescription.drugName)}</p>
@@ -830,7 +838,7 @@ loginForm.addEventListener('submit', async (event) => {
 
   try {
     await submitAuthForm('/api/auth/login', {
-      email: formData.get('email'),
+      identifier: formData.get('identifier'),
       password: formData.get('password')
     });
     loginForm.reset();
@@ -847,6 +855,7 @@ registerForm.addEventListener('submit', async (event) => {
   try {
     await submitAuthForm('/api/auth/register', {
       name: formData.get('name'),
+      username: formData.get('username'),
       email: formData.get('email'),
       password: formData.get('password'),
       role: formData.get('role')
