@@ -21,6 +21,20 @@ const PRESCRIPTION_STATUS = {
   CANCELLED: 'Cancelled',
   INVALID: 'Invalid'
 };
+const COMMON_DRUG_SUGGESTIONS = [
+  'Amoxicillin',
+  'Azithromycin',
+  'Cephalexin',
+  'Cefixime',
+  'Ciprofloxacin',
+  'Metformin',
+  'Amlodipine',
+  'Atorvastatin',
+  'Paracetamol',
+  'Ibuprofen',
+  'Omeprazole',
+  'Cetirizine'
+];
 
 function normalizeReferenceCategory(category) {
   if (category === 'antibiotics') {
@@ -93,11 +107,33 @@ async function fallbackMedicineSearch(db, query) {
   const normalized = query.toLowerCase();
   const configuredDrugs = await db.getReferenceList('drugs');
   const drugs = configuredDrugs.length > 0 ? configuredDrugs : FALLBACK_DRUGS;
+  const commonDrugs = COMMON_DRUG_SUGGESTIONS.filter((name) => {
+    return drugs.some((drug) => drug.toLowerCase() === name.toLowerCase());
+  });
+
+  if (normalized.length < 2) {
+    return [...commonDrugs, ...drugs.filter((name) => {
+      return !commonDrugs.some((common) => common.toLowerCase() === name.toLowerCase());
+    })].slice(0, 8).map((name) => ({
+      name,
+      source: 'fallback',
+      detail: 'Configured drug list'
+    }));
+  }
+
   const matches = drugs.filter((name) => {
     return name.toLowerCase().includes(normalized);
   });
+  const sortedMatches = matches.sort((a, b) => {
+    const aCommon = commonDrugs.some((name) => name.toLowerCase() === a.toLowerCase()) ? 0 : 1;
+    const bCommon = commonDrugs.some((name) => name.toLowerCase() === b.toLowerCase()) ? 0 : 1;
+    const aPrefix = a.toLowerCase().startsWith(normalized) ? 0 : 1;
+    const bPrefix = b.toLowerCase().startsWith(normalized) ? 0 : 1;
 
-  return (matches.length > 0 ? matches : drugs).slice(0, 8).map((name) => ({
+    return aCommon - bCommon || aPrefix - bPrefix || a.localeCompare(b);
+  });
+
+  return (sortedMatches.length > 0 ? sortedMatches : commonDrugs).slice(0, 8).map((name) => ({
     name,
     source: 'fallback',
     detail: 'Configured drug list'

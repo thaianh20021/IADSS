@@ -16,11 +16,14 @@ const tabPanels = document.querySelectorAll('.tab-panel');
 const totalMetric = document.querySelector('#totalMetric');
 const approvedMetric = document.querySelector('#approvedMetric');
 const blockedMetric = document.querySelector('#blockedMetric');
-const misuseRateMetric = document.querySelector('#misuseRateMetric');
+const blockedRateMetric = document.querySelector('#blockedRateMetric');
+const suspiciousRateMetric = document.querySelector('#suspiciousRateMetric');
 const resetTransactionFormButton = document.querySelector('#resetTransactionForm');
 const resetPrescriptionFormButton = document.querySelector('#resetPrescriptionForm');
 const drugListForm = document.querySelector('#drugListForm');
 const drugClassListForm = document.querySelector('#drugClassListForm');
+const drugBulkForm = document.querySelector('#drugBulkForm');
+const drugClassBulkForm = document.querySelector('#drugClassBulkForm');
 const drugList = document.querySelector('#drugList');
 const drugClassList = document.querySelector('#drugClassList');
 const lookupPrescriptionId = document.querySelector('#lookupPrescriptionId');
@@ -118,12 +121,33 @@ function updateMetrics(transactions) {
   const total = transactions.length;
   const blocked = transactions.filter((transaction) => transaction.status === 'Blocked').length;
   const approved = transactions.filter((transaction) => transaction.status === 'Approved').length;
-  const misuseRate = total === 0 ? 0 : Math.round((blocked / total) * 100);
+  const suspicious = transactions.filter(isSuspiciousTransaction).length;
+  const blockedRate = total === 0 ? 0 : Math.round((blocked / total) * 100);
+  const suspiciousRate = total === 0 ? 0 : Math.round((suspicious / total) * 100);
 
   totalMetric.textContent = String(total);
   approvedMetric.textContent = String(approved);
   blockedMetric.textContent = String(blocked);
-  misuseRateMetric.textContent = `${misuseRate}%`;
+  blockedRateMetric.textContent = `${blockedRate}%`;
+  suspiciousRateMetric.textContent = `${suspiciousRate}%`;
+}
+
+function isSuspiciousTransaction(transaction) {
+  if (transaction.status !== 'Blocked') {
+    return false;
+  }
+
+  const status = String(transaction.prescriptionStatus ?? '').toLowerCase();
+  const reason = String(transaction.reason ?? '').toLowerCase();
+
+  return (
+    status === 'invalid' ||
+    status === 'expired' ||
+    status === 'cancelled' ||
+    status === 'fully dispensed' ||
+    reason.includes('exceeds remaining quantity') ||
+    reason.includes('not found')
+  );
 }
 
 function hideMedicineSuggestions() {
@@ -255,6 +279,19 @@ async function deleteReferenceItem(category, value) {
   }
 
   referenceLists[category] = data.items ?? [];
+}
+
+function parseBulkValues(value) {
+  return [...new Set(String(value ?? '')
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean))];
+}
+
+async function importReferenceItems(category, values) {
+  for (const value of values) {
+    await addReferenceItem(category, value);
+  }
 }
 
 async function checkHealth() {
@@ -634,6 +671,45 @@ drugClassListForm.addEventListener('submit', async (event) => {
     setSettingsAlert('success', 'Drug class list updated.');
   } catch (error) {
     setSettingsAlert('danger', 'Unable to add drug class.', error.message);
+  }
+});
+
+drugBulkForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const values = parseBulkValues(new FormData(drugBulkForm).get('values'));
+
+  if (values.length === 0) {
+    setSettingsAlert('danger', 'Paste at least one drug to import.');
+    return;
+  }
+
+  try {
+    await importReferenceItems('drugs', values);
+    drugBulkForm.reset();
+    renderSettingsList('drugs', drugList, referenceLists.drugs);
+    setSettingsAlert('success', `${values.length} drug(s) imported.`);
+  } catch (error) {
+    setSettingsAlert('danger', 'Unable to import drugs.', error.message);
+  }
+});
+
+drugClassBulkForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const values = parseBulkValues(new FormData(drugClassBulkForm).get('values'));
+
+  if (values.length === 0) {
+    setSettingsAlert('danger', 'Paste at least one drug class to import.');
+    return;
+  }
+
+  try {
+    await importReferenceItems('drugClasses', values);
+    drugClassBulkForm.reset();
+    renderSettingsList('drugClasses', drugClassList, referenceLists.drugClasses);
+    populateDrugClassSelects();
+    setSettingsAlert('success', `${values.length} drug class(es) imported.`);
+  } catch (error) {
+    setSettingsAlert('danger', 'Unable to import drug classes.', error.message);
   }
 });
 

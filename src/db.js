@@ -8,56 +8,327 @@ const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 const JSON_DB_PATH = path.join(DATA_DIR, 'iadss-db.json');
+const REFERENCE_SEED_VERSION = 2;
 
 export const FALLBACK_DRUGS = [
-  'Amoxicillin',
-  'Amoxicillin Clavulanate',
+  'Acetaminophen',
+  'Acyclovir',
+  'Adapalene',
+  'Adenosine',
+  'Alprazolam',
+  'Amikacin',
+  'Amiodarone',
   'Amlodipine',
+  'Amoxicillin',
+  'Amoxicillin/Clavulanate',
+  'Amphotericin B',
   'Ampicillin',
+  'Ampicillin/Sulbactam',
+  'Apixaban',
+  'Artificial tears',
+  'Aspirin',
+  'Atenolol',
   'Atorvastatin',
+  'Atropine',
   'Azithromycin',
+  'Aztreonam',
+  'Baloxavir',
+  'Beclomethasone',
+  'Benzathine penicillin G',
+  'Benzoyl peroxide',
+  'Betamethasone',
+  'Bictegravir',
+  'Bisacodyl',
+  'Bisoprolol',
+  'Budesonide',
+  'Bupivacaine',
+  'Canagliflozin',
+  'Carbamazepine',
+  'Carvedilol',
+  'Caspofungin',
   'Cefaclor',
+  'Cefadroxil',
+  'Cefazolin',
+  'Cefdinir',
+  'Cefepime',
   'Cefixime',
+  'Cefotaxime',
+  'Cefotetan',
+  'Cefoxitin',
+  'Cefpodoxime',
+  'Ceftaroline',
+  'Ceftazidime',
+  'Ceftobiprole',
   'Ceftriaxone',
-  'Cephalexin',
   'Cefuroxime',
+  'Celecoxib',
+  'Cephalexin',
   'Cetirizine',
+  'Chloramphenicol',
+  'Chlorpheniramine',
+  'Cimetidine',
   'Ciprofloxacin',
+  'Ciprofloxacin eye drops',
   'Clarithromycin',
   'Clindamycin',
-  'Cotrimoxazole',
+  'Clonazepam',
+  'Clopidogrel',
+  'Clotrimazole',
+  'Cloxacillin',
+  'Codeine',
+  'Colistin',
+  'Combined oral contraceptives',
+  'Dabigatran',
+  'Dalbavancin',
+  'Dapagliflozin',
+  'Daptomycin',
+  'Delafloxacin',
+  'Dexamethasone',
+  'Diazepam',
+  'Diclofenac',
+  'Dicloxacillin',
+  'Digoxin',
+  'Diltiazem',
+  'Dobutamine',
+  'Dopamine',
+  'Doripenem',
+  'Dolutegravir',
+  'Domperidone',
   'Doxycycline',
+  'Dulaglutide',
+  'Duloxetine',
+  'Efavirenz',
+  'Emtricitabine',
+  'Enalapril',
+  'Enoxaparin',
+  'Entecavir',
+  'Epinephrine',
+  'Ertapenem',
+  'Erythromycin',
+  'Escitalopram',
+  'Esomeprazole',
+  'Etomidate',
+  'Etoricoxib',
+  'Famciclovir',
+  'Famotidine',
+  'Fenofibrate',
+  'Fentanyl',
+  'Fexofenadine',
+  'Fidaxomicin',
+  'Flucytosine',
+  'Fluconazole',
+  'Fluoxetine',
+  'Fluticasone',
+  'Formoterol',
+  'Fosfomycin',
+  'Furosemide',
+  'Gentamicin',
+  'Glibenclamide',
+  'Gliclazide',
+  'Glimepiride',
+  'Griseofulvin',
+  'Haloperidol',
+  'Heparin',
+  'Hydrochlorothiazide',
+  'Hydrocortisone',
   'Ibuprofen',
+  'Imipenem/Cilastatin',
+  'Indomethacin',
+  'Insulin aspart',
+  'Insulin glargine',
+  'Insulin lispro',
+  'Insulin regular',
+  'Ipratropium',
+  'Isotretinoin',
+  'Itraconazole',
+  'Ketamine',
+  'Ketoconazole',
+  'Ketorolac',
+  'Lamivudine',
+  'Lamotrigine',
+  'Latanoprost',
+  'Lactulose',
+  'Ledipasvir',
+  'Levetiracetam',
   'Levofloxacin',
+  'Levonorgestrel',
+  'Lidocaine',
+  'Linagliptin',
+  'Lincomycin',
+  'Linezolid',
+  'Liraglutide',
+  'Lisinopril',
+  'Loperamide',
+  'Loratadine',
+  'Lorazepam',
   'Losartan',
+  'Meloxicam',
   'Meropenem',
   'Metformin',
+  'Methylergometrine',
+  'Methylprednisolone',
+  'Metoclopramide',
+  'Metoprolol',
   'Metronidazole',
+  'Micafungin',
+  'Miconazole',
+  'Minocycline',
+  'Misoprostol',
+  'Morphine',
+  'Moxifloxacin',
+  'Mupirocin',
+  'Nafcillin',
+  'Naproxen',
+  'Neomycin',
+  'Nifedipine',
   'Nitrofurantoin',
+  'Norepinephrine',
+  'Norfloxacin',
+  'NPH insulin',
+  'Nystatin',
+  'Ofloxacin',
+  'Olanzapine',
+  'Olmesartan',
   'Omeprazole',
+  'Ondansetron',
+  'Oseltamivir',
+  'Oxacillin',
+  'Oxycodone',
+  'Oxytocin',
+  'Pantoprazole',
   'Paracetamol',
-  'Salbutamol'
+  'Paroxetine',
+  'Penicillin G',
+  'Penicillin V',
+  'Perindopril',
+  'Phenytoin',
+  'Piperacillin',
+  'Piperacillin/Tazobactam',
+  'Polyethylene glycol',
+  'Polymyxin B',
+  'Posaconazole',
+  'Prednisolone',
+  'Prednisone',
+  'Procaine penicillin',
+  'Progesterone',
+  'Propofol',
+  'Propranolol',
+  'Quetiapine',
+  'Rabeprazole',
+  'Ramipril',
+  'Ribavirin',
+  'Rifampin',
+  'Risperidone',
+  'Ritonavir',
+  'Rivaroxaban',
+  'Ropivacaine',
+  'Rosuvastatin',
+  'Roxithromycin',
+  'Salbutamol',
+  'Salmeterol',
+  'Semaglutide',
+  'Sertraline',
+  'Sevoflurane',
+  'Simvastatin',
+  'Sitagliptin',
+  'Sofosbuvir',
+  'Spironolactone',
+  'Streptomycin',
+  'Sulfadiazine',
+  'Sulfasalazine',
+  'Tacrolimus ointment',
+  'Teicoplanin',
+  'Telmisartan',
+  'Tedizolid',
+  'Tenofovir',
+  'Terbinafine',
+  'Tetracycline',
+  'Ticarcillin',
+  'Ticarcillin/Clavulanate',
+  'Ticagrelor',
+  'Tigecycline',
+  'Timolol eye drops',
+  'Tinidazole',
+  'Tiotropium',
+  'Tobramycin',
+  'Tobramycin eye drops',
+  'Torsemide',
+  'Tramadol',
+  'Trimethoprim/Sulfamethoxazole',
+  'Valacyclovir',
+  'Valproate',
+  'Valsartan',
+  'Vancomycin',
+  'Venlafaxine',
+  'Verapamil',
+  'Vildagliptin',
+  'Voriconazole',
+  'Warfarin',
+  'Zanamivir'
 ];
 
 export const FALLBACK_ANTIBIOTICS = FALLBACK_DRUGS;
 
 export const DEFAULT_DRUG_CLASSES = [
+  'ACE inhibitor',
   'Analgesic',
+  'Aminoglycoside',
+  'Anti-herpes antiviral',
+  'Anti-influenza antiviral',
+  'Anticoagulant',
   'Antidiabetic',
+  'Antiemetic',
+  'Antiepileptic',
+  'Antifungal',
   'Antihistamine',
   'Antihypertensive',
+  'Antiplatelet',
+  'Antipsychotic',
+  'Antiviral',
+  'ARB',
   'Bronchodilator',
+  'Calcium channel blocker',
+  'Carbapenem',
   'Cephalosporin',
+  'Corticosteroid',
+  'Dermatology',
+  'Diuretic',
+  'DPP-4 inhibitor',
+  'Emergency medicine',
+  'Echinocandin',
   'Fluoroquinolone',
+  'General anesthetic',
+  'GLP-1 agonist',
+  'Glycopeptide',
+  'H2 blocker',
+  'Hepatitis antiviral',
+  'HIV antiviral',
+  'Inhaled corticosteroid',
+  'Insulin',
   'Lincosamide',
+  'Lipopeptide',
+  'Lipid lowering',
+  'Local anesthetic',
   'Macrolide',
+  'Monobactam',
+  'Nitrofuran',
   'Nitroimidazole',
   'NSAID',
+  'Obstetrics and gynecology',
+  'Ophthalmic',
+  'Opioid analgesic',
+  'Oxazolidinone',
   'Penicillin',
+  'Polymyxin',
+  'Polyene',
   'PPI',
+  'Respiratory',
+  'SGLT2 inhibitor',
+  'SNRI',
+  'SSRI',
   'Statin',
   'Sulfonamide',
-  'Tetracycline',
+  'Tetracycline'
 ];
 
 export const DEFAULT_ANTIBIOTIC_CLASSES = DEFAULT_DRUG_CLASSES;
@@ -317,10 +588,47 @@ class PostgresDatabase {
       );
     `);
 
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS app_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+
     await this.removeLegacyDemoPrescriptions();
 
     await this.seedReferenceItems('drugs', FALLBACK_DRUGS);
     await this.seedReferenceItems('drugClasses', DEFAULT_DRUG_CLASSES);
+    await this.applyReferenceSeedVersion();
+  }
+
+  async applyReferenceSeedVersion() {
+    const result = await this.pool.query('SELECT value FROM app_metadata WHERE key = $1;', [
+      'referenceSeedVersion'
+    ]);
+    const currentVersion = Number(result.rows[0]?.value ?? 0);
+
+    if (currentVersion >= REFERENCE_SEED_VERSION) {
+      return;
+    }
+
+    for (const value of FALLBACK_DRUGS) {
+      await this.addReferenceItem('drugs', value);
+    }
+
+    for (const value of DEFAULT_DRUG_CLASSES) {
+      await this.addReferenceItem('drugClasses', value);
+    }
+
+    await this.pool.query(
+      `
+        INSERT INTO app_metadata (key, value)
+        VALUES ($1, $2)
+        ON CONFLICT (key)
+        DO UPDATE SET value = EXCLUDED.value;
+      `,
+      ['referenceSeedVersion', String(REFERENCE_SEED_VERSION)]
+    );
   }
 
   async removeLegacyDemoPrescriptions() {
@@ -745,6 +1053,9 @@ class JsonFileDatabase {
         drugs: uniqueSorted(FALLBACK_DRUGS),
         drugClasses: uniqueSorted(DEFAULT_DRUG_CLASSES)
       },
+      metadata: {
+        referenceSeedVersion: REFERENCE_SEED_VERSION
+      },
       counters: {
         transactions: 1
       }
@@ -843,6 +1154,11 @@ class JsonFileDatabase {
       changed = true;
     }
 
+    if (!this.state.metadata || typeof this.state.metadata !== 'object') {
+      this.state.metadata = {};
+      changed = true;
+    }
+
     if (!Array.isArray(this.state.referenceLists.drugs)) {
       this.state.referenceLists.drugs = uniqueSorted([
         ...(this.state.referenceLists.antibiotics ?? []),
@@ -859,8 +1175,11 @@ class JsonFileDatabase {
       changed = true;
     }
 
-    const normalizedDrugs = uniqueSorted(this.state.referenceLists.drugs);
-    const normalizedClasses = uniqueSorted(this.state.referenceLists.drugClasses);
+    const currentSeedVersion = Number(this.state.metadata.referenceSeedVersion ?? 0);
+    const seedDrugs = currentSeedVersion < REFERENCE_SEED_VERSION ? FALLBACK_DRUGS : [];
+    const seedClasses = currentSeedVersion < REFERENCE_SEED_VERSION ? DEFAULT_DRUG_CLASSES : [];
+    const normalizedDrugs = uniqueSorted([...this.state.referenceLists.drugs, ...seedDrugs]);
+    const normalizedClasses = uniqueSorted([...this.state.referenceLists.drugClasses, ...seedClasses]);
 
     if (JSON.stringify(normalizedDrugs) !== JSON.stringify(this.state.referenceLists.drugs)) {
       this.state.referenceLists.drugs = normalizedDrugs;
@@ -869,6 +1188,11 @@ class JsonFileDatabase {
 
     if (JSON.stringify(normalizedClasses) !== JSON.stringify(this.state.referenceLists.drugClasses)) {
       this.state.referenceLists.drugClasses = normalizedClasses;
+      changed = true;
+    }
+
+    if (currentSeedVersion < REFERENCE_SEED_VERSION) {
+      this.state.metadata.referenceSeedVersion = REFERENCE_SEED_VERSION;
       changed = true;
     }
 

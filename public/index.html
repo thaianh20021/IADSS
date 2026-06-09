@@ -289,7 +289,8 @@
           <div class="metric"><span>Total Attempts</span><strong id="totalMetric">0</strong></div>
           <div class="metric"><span>Approved</span><strong id="approvedMetric">0</strong></div>
           <div class="metric danger-metric"><span>Blocked</span><strong id="blockedMetric">0</strong></div>
-          <div class="metric danger-metric"><span>Misuse Rate</span><strong id="misuseRateMetric">0%</strong></div>
+          <div class="metric danger-metric"><span>Blocked Attempt Rate</span><strong id="blockedRateMetric">0%</strong></div>
+          <div class="metric danger-metric"><span>Suspicious Dispensing Rate</span><strong id="suspiciousRateMetric">0%</strong></div>
         </div>
 
         <div class="table-wrap">
@@ -373,6 +374,10 @@
               <input name="value" type="text" placeholder="Add drug name" autocomplete="off" required>
               <button class="primary-button" type="submit">Add</button>
             </form>
+            <form class="bulk-form" id="drugBulkForm">
+              <textarea name="values" placeholder="Bulk import: paste one drug per line, or separate with commas"></textarea>
+              <button class="ghost-button" type="submit">Import Drugs</button>
+            </form>
             <div class="settings-list" id="drugList"></div>
           </section>
 
@@ -381,6 +386,10 @@
             <form class="settings-form" id="drugClassListForm">
               <input name="value" type="text" placeholder="Add drug class" autocomplete="off" required>
               <button class="primary-button" type="submit">Add</button>
+            </form>
+            <form class="bulk-form" id="drugClassBulkForm">
+              <textarea name="values" placeholder="Bulk import: paste one class per line, or separate with commas"></textarea>
+              <button class="ghost-button" type="submit">Import Classes</button>
             </form>
             <div class="settings-list" id="drugClassList"></div>
           </section>

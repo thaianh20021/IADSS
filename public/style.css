@@ -836,7 +836,14 @@ tr.blocked-row:hover {
   margin-bottom: 16px;
 }
 
-.settings-form input {
+.bulk-form {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.settings-form input,
+.bulk-form textarea {
   min-height: 44px;
   width: 100%;
   border: 1px solid var(--border-strong);
@@ -845,7 +852,14 @@ tr.blocked-row:hover {
   outline: none;
 }
 
-.settings-form input:focus {
+.bulk-form textarea {
+  min-height: 110px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.settings-form input:focus,
+.bulk-form textarea:focus {
   border-color: var(--medical-blue);
   box-shadow: 0 0 0 3px rgba(114, 168, 232, 0.36);
 }
