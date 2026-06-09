@@ -1,5 +1,6 @@
 import 'dotenv/config';
 
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
@@ -14,6 +15,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const JSQR_DIST_DIR = path.join(__dirname, 'node_modules', 'jsqr', 'dist');
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const PASSWORD_HASH_ITERATIONS = 120000;
+const AUTH_ROLES = new Set(['pharmacy', 'doctor', 'moh']);
 const REFERENCE_CATEGORIES = new Set(['drugs', 'drugClasses', 'antibiotics', 'antibioticClasses']);
 const PRESCRIPTION_STATUS = {
   VALID: 'Valid',
@@ -48,6 +52,106 @@ function normalizeReferenceCategory(category) {
   }
 
   return category;
+}
+
+function sanitizeUser(user) {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt
+  };
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, PASSWORD_HASH_ITERATIONS, 32, 'sha256').toString('hex');
+  return `pbkdf2$${PASSWORD_HASH_ITERATIONS}$${salt}$${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  const parts = String(storedHash ?? '').split('$');
+
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2') {
+    return false;
+  }
+
+  const iterations = Number(parts[1]);
+  const salt = parts[2];
+  const expectedHash = parts[3];
+
+  if (!Number.isInteger(iterations) || !salt || !expectedHash) {
+    return false;
+  }
+
+  const actual = crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256');
+  const expected = Buffer.from(expectedHash, 'hex');
+
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+function createSessionToken() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+function getBearerToken(request) {
+  const header = request.get('Authorization') ?? '';
+  const [scheme, token] = header.split(' ');
+  return scheme === 'Bearer' && token ? token : '';
+}
+
+function validateAuthPayload(payload, mode) {
+  const email = normalizeInput(payload.email).toLowerCase();
+  const password = String(payload.password ?? '');
+  const name = normalizeInput(payload.name);
+  const role = normalizeInput(payload.role).toLowerCase();
+
+  if (!email || !email.includes('@')) {
+    return { error: 'Valid email is required.' };
+  }
+
+  if (password.length < 6) {
+    return { error: 'Password must be at least 6 characters.' };
+  }
+
+  if (mode === 'register') {
+    if (!name) {
+      return { error: 'Full name is required.' };
+    }
+
+    if (!AUTH_ROLES.has(role)) {
+      return { error: 'Role must be pharmacy, doctor, or moh.' };
+    }
+  }
+
+  return {
+    userInput: {
+      email,
+      password,
+      name,
+      role
+    }
+  };
+}
+
+async function createAuthSession(db, user) {
+  const token = createSessionToken();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  await db.createSession({
+    token,
+    userId: user.id,
+    expiresAt
+  });
+
+  return {
+    token,
+    expiresAt
+  };
 }
 
 function sanitizePrescriptionForPharmacy(prescription) {
@@ -540,6 +644,36 @@ function validateReferenceCategory(category) {
 export async function createApp(options = {}) {
   const db = options.db ?? (await createDatabase(options.database));
   const app = express();
+  const requireAuth = (allowedRoles = []) => {
+    return async (request, response, next) => {
+      try {
+        const token = getBearerToken(request);
+
+        if (!token) {
+          response.status(401).json({ error: 'Authentication required.' });
+          return;
+        }
+
+        const user = await db.findUserBySessionToken(token);
+
+        if (!user) {
+          response.status(401).json({ error: 'Session expired or invalid.' });
+          return;
+        }
+
+        if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+          response.status(403).json({ error: 'You do not have access to this portal.' });
+          return;
+        }
+
+        request.user = user;
+        request.authToken = token;
+        next();
+      } catch (error) {
+        next(error);
+      }
+    };
+  };
 
   app.locals.db = db;
 
@@ -555,7 +689,84 @@ export async function createApp(options = {}) {
     });
   });
 
-  app.get('/api/prescriptions', async (request, response, next) => {
+  app.post('/api/auth/register', async (request, response, next) => {
+    try {
+      const { error, userInput } = validateAuthPayload(request.body ?? {}, 'register');
+
+      if (error) {
+        response.status(400).json({ error });
+        return;
+      }
+
+      const existingUser = await db.findUserByEmail(userInput.email);
+
+      if (existingUser) {
+        response.status(409).json({ error: 'An account with this email already exists.' });
+        return;
+      }
+
+      const user = await db.createUser({
+        name: userInput.name,
+        email: userInput.email,
+        role: userInput.role,
+        passwordHash: hashPassword(userInput.password)
+      });
+      const session = await createAuthSession(db, user);
+
+      response.status(201).json({
+        user: sanitizeUser(user),
+        token: session.token,
+        expiresAt: session.expiresAt
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/auth/login', async (request, response, next) => {
+    try {
+      const { error, userInput } = validateAuthPayload(request.body ?? {}, 'login');
+
+      if (error) {
+        response.status(400).json({ error });
+        return;
+      }
+
+      const user = await db.findUserByEmail(userInput.email);
+
+      if (!user || !verifyPassword(userInput.password, user.passwordHash)) {
+        response.status(401).json({ error: 'Invalid email or password.' });
+        return;
+      }
+
+      const session = await createAuthSession(db, user);
+
+      response.json({
+        user: sanitizeUser(user),
+        token: session.token,
+        expiresAt: session.expiresAt
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/auth/me', requireAuth(), (request, response) => {
+    response.json({
+      user: sanitizeUser(request.user)
+    });
+  });
+
+  app.post('/api/auth/logout', requireAuth(), async (request, response, next) => {
+    try {
+      await db.deleteSession(request.authToken);
+      response.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/prescriptions', requireAuth(['doctor', 'moh']), async (request, response, next) => {
     try {
       response.json({
         prescriptions: await db.getPrescriptions()
@@ -565,7 +776,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.get('/api/prescriptions/:prescriptionId', async (request, response, next) => {
+  app.get('/api/prescriptions/:prescriptionId', requireAuth(['pharmacy', 'doctor', 'moh']), async (request, response, next) => {
     try {
       const prescription = await db.findPrescriptionById(request.params.prescriptionId);
 
@@ -605,7 +816,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.post('/api/prescriptions', async (request, response, next) => {
+  app.post('/api/prescriptions', requireAuth(['doctor', 'moh']), async (request, response, next) => {
     try {
       const { error, prescription } = validatePrescriptionPayload(request.body ?? {});
 
@@ -624,7 +835,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.post('/api/prescriptions/:prescriptionId/cancel', async (request, response, next) => {
+  app.post('/api/prescriptions/:prescriptionId/cancel', requireAuth(['doctor', 'moh']), async (request, response, next) => {
     try {
       const prescription = await db.findPrescriptionById(request.params.prescriptionId);
 
@@ -645,7 +856,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.get('/api/medicines/search', async (request, response, next) => {
+  app.get('/api/medicines/search', requireAuth(['pharmacy', 'doctor', 'moh']), async (request, response, next) => {
     try {
       const query = normalizeInput(request.query.q);
       const result = await searchMedicines(db, query);
@@ -655,7 +866,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.get('/api/reference/:category', async (request, response, next) => {
+  app.get('/api/reference/:category', requireAuth(['pharmacy', 'doctor', 'moh']), async (request, response, next) => {
     try {
       const category = validateReferenceCategory(request.params.category);
 
@@ -673,7 +884,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.post('/api/reference/:category', async (request, response, next) => {
+  app.post('/api/reference/:category', requireAuth(['moh']), async (request, response, next) => {
     try {
       const category = validateReferenceCategory(request.params.category);
       const value = normalizeInput(request.body?.value);
@@ -699,7 +910,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.delete('/api/reference/:category/:value', async (request, response, next) => {
+  app.delete('/api/reference/:category/:value', requireAuth(['moh']), async (request, response, next) => {
     try {
       const category = validateReferenceCategory(request.params.category);
       const value = normalizeInput(request.params.value);
@@ -720,7 +931,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.get('/api/transactions', async (request, response, next) => {
+  app.get('/api/transactions', requireAuth(['moh']), async (request, response, next) => {
     try {
       response.json({
         transactions: await db.getTransactions()
@@ -730,7 +941,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.post('/api/transactions', async (request, response, next) => {
+  app.post('/api/transactions', requireAuth(['pharmacy']), async (request, response, next) => {
     try {
       const evaluated = applyAuditedOverride(await evaluateTransaction(db, request.body ?? {}), request.body ?? {});
       const saved = await db.saveTransaction(evaluated);
@@ -753,7 +964,7 @@ export async function createApp(options = {}) {
     }
   });
 
-  app.delete('/api/transactions', async (request, response, next) => {
+  app.delete('/api/transactions', requireAuth(['moh']), async (request, response, next) => {
     try {
       await db.clearTransactions();
       response.json({

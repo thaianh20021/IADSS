@@ -7,6 +7,7 @@ Vietnamese version: [README.vi.md](README.vi.md)
 ## Features
 
 - Role selector for Pharmacy, Hospital / Doctor, and MOH users.
+- Registration and login with role-based API access for Pharmacy, Doctor / Hospital, and MOH accounts.
 - Pharmacy Portal that loads a prescription by ID / QR code before dispensing.
 - Hospital / Doctor Portal for creating valid prescription records with diagnosis fields.
 - Prescription validation against prescriptions entered through the Hospital / Doctor Portal.
@@ -29,8 +30,9 @@ Open `http://localhost:3000`.
 
 ## Local Test Checklist
 
-1. Open the Hospital / Doctor Portal tab.
-2. Create a prescription:
+1. Create one Doctor / Hospital account, one Pharmacy account, and one MOH account from the sign-in screen.
+2. Log in as the Doctor / Hospital account and open the Hospital / Doctor Portal tab.
+3. Create a prescription:
    - Prescription ID: `RX-2026-0001`
    - Patient ID: `12345`
    - Hospital / Clinic: `National General Hospital`
@@ -41,19 +43,20 @@ Open `http://localhost:3000`.
    - Quantity Limit: `20`
    - Treatment Duration: `5`
    - Expiry Date: any future date
-3. Open the Pharmacy Portal tab, load `RX-2026-0001`, and dispense quantity `10`.
-4. Confirm the green message appears: `Transaction Approved. Data synced to MOH.`
-5. Load the same prescription again and try dispensing quantity `11`.
-6. Confirm the red message appears because only `10` remain.
-7. Dispense the remaining `10` and confirm the status becomes `Fully Dispensed`.
-8. Submit an invalid transaction:
+4. Log out, log in as the Pharmacy account, open the Pharmacy Portal tab, load `RX-2026-0001`, and dispense quantity `10`.
+5. Confirm the green message appears: `Transaction Approved. Data synced to MOH.`
+6. Load the same prescription again and try dispensing quantity `11`.
+7. Confirm the red message appears because only `10` remain.
+8. Dispense the remaining `10` and confirm the status becomes `Fully Dispensed`.
+9. Submit an invalid transaction:
    - Prescription ID: `RX-UNKNOWN`
    - Quantity: `1`
-9. Confirm the red message appears: `HIGH RISK ALERT: Invalid Prescription. Sale Blocked.`
-10. Open the MOH Dashboard tab and confirm Approved, Blocked, and prescription status are logged.
-11. Confirm the blocked row has a light red background.
-12. Open Settings to add or remove drugs and drug classes used by dropdowns.
-13. Click `Clear Data` to reset the dashboard for another test run.
+10. Confirm the red message appears: `HIGH RISK ALERT: Invalid Prescription. Sale Blocked.`
+11. Log out, log in as the MOH account, and open the MOH Dashboard tab.
+12. Confirm Approved, Blocked, and prescription status are logged.
+13. Confirm the blocked row has a light red background.
+14. Open Settings to add or remove drugs and drug classes used by dropdowns.
+15. Click `Clear Data` to reset the dashboard for another test run.
 
 You can also run the automated smoke test:
 
@@ -61,7 +64,7 @@ You can also run the automated smoke test:
 npm run smoke
 ```
 
-The smoke test verifies health, reference lists, doctor-created prescriptions, pharmacy lookup privacy, partial dispensing, over-remaining blocks, transaction history, misuse rate, and medicine lookup.
+The smoke test verifies health, registration/login, role-scoped API access, reference lists, doctor-created prescriptions, pharmacy lookup privacy, partial dispensing, over-remaining blocks, transaction history, intervention rate, and medicine lookup.
 
 ## Render Deployment
 
@@ -146,6 +149,10 @@ For a fuller Vietnamese tester script, feedback table, and pass criteria, use [d
 ## API
 
 - `GET /api/health`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
 - `GET /api/prescriptions`
 - `GET /api/prescriptions/:prescriptionId`
 - `POST /api/prescriptions`

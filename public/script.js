@@ -1,5 +1,12 @@
 const form = document.querySelector('#transactionForm');
 const prescriptionForm = document.querySelector('#prescriptionForm');
+const authPanel = document.querySelector('#authPanel');
+const loginForm = document.querySelector('#loginForm');
+const registerForm = document.querySelector('#registerForm');
+const authAlertArea = document.querySelector('#authAlertArea');
+const userMenu = document.querySelector('#userMenu');
+const currentUserLabel = document.querySelector('#currentUserLabel');
+const logoutButton = document.querySelector('#logoutButton');
 const alertArea = document.querySelector('#alertArea');
 const prescriptionAlertArea = document.querySelector('#prescriptionAlertArea');
 const settingsAlertArea = document.querySelector('#settingsAlertArea');
@@ -47,6 +54,8 @@ let currentMedicineResults = [];
 let lastSavedPrescription = null;
 let qrScanStream = null;
 let qrScanTimer = null;
+let authToken = window.localStorage.getItem('iadssAuthToken') || '';
+let currentUser = null;
 const qrCanvas = document.createElement('canvas');
 const qrCanvasContext = qrCanvas.getContext('2d', {
   willReadFrequently: true
@@ -54,6 +63,16 @@ const qrCanvasContext = qrCanvas.getContext('2d', {
 let referenceLists = {
   drugs: [],
   drugClasses: []
+};
+const allowedTabsByRole = {
+  pharmacy: ['rolePanel', 'posPanel', 'apiDocsPanel'],
+  doctor: ['rolePanel', 'doctorPanel', 'apiDocsPanel'],
+  moh: ['rolePanel', 'dashboardPanel', 'settingsPanel', 'apiDocsPanel']
+};
+const defaultTabByRole = {
+  pharmacy: 'posPanel',
+  doctor: 'doctorPanel',
+  moh: 'dashboardPanel'
 };
 
 function escapeHtml(value) {
@@ -80,6 +99,10 @@ function setAlert(type, message, reason = '') {
   renderAlert(alertArea, type, message, reason);
 }
 
+function setAuthAlert(type, message, reason = '') {
+  renderAlert(authAlertArea, type, message, reason);
+}
+
 function setPrescriptionAlert(type, message, reason = '') {
   renderAlert(prescriptionAlertArea, type, message, reason);
 }
@@ -90,6 +113,63 @@ function setSettingsAlert(type, message, reason = '') {
 
 function clearAlert(target) {
   target.innerHTML = '';
+}
+
+function getAuthHeaders(headers = {}) {
+  return authToken
+    ? {
+        ...headers,
+        Authorization: `Bearer ${authToken}`
+      }
+    : headers;
+}
+
+async function apiFetch(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    headers: getAuthHeaders(options.headers ?? {})
+  });
+}
+
+function canAccessTab(panelId) {
+  if (!currentUser) {
+    return false;
+  }
+
+  return (allowedTabsByRole[currentUser.role] ?? []).includes(panelId);
+}
+
+function applyRoleAccess() {
+  tabButtons.forEach((button) => {
+    const allowed = currentUser && canAccessTab(button.dataset.tab);
+    button.disabled = !allowed;
+  });
+
+  document.querySelectorAll('.role-card').forEach((card) => {
+    const allowed = currentUser && canAccessTab(card.dataset.tab);
+    card.disabled = !allowed;
+  });
+}
+
+function showLoggedOut() {
+  currentUser = null;
+  authToken = '';
+  window.localStorage.removeItem('iadssAuthToken');
+  document.body.classList.add('auth-locked');
+  authPanel.hidden = false;
+  userMenu.hidden = true;
+  applyRoleAccess();
+  tabPanels.forEach((panel) => panel.classList.remove('active'));
+}
+
+function showLoggedIn(user) {
+  currentUser = user;
+  document.body.classList.remove('auth-locked');
+  authPanel.hidden = true;
+  userMenu.hidden = false;
+  currentUserLabel.textContent = `${user.name} (${user.role})`;
+  applyRoleAccess();
+  setActiveTab(defaultTabByRole[user.role] ?? 'rolePanel');
 }
 
 function formatTimestamp(timestamp) {
@@ -108,6 +188,16 @@ function getStatusClass(status) {
 }
 
 function setActiveTab(panelId) {
+  if (!currentUser) {
+    showLoggedOut();
+    return;
+  }
+
+  if (!canAccessTab(panelId)) {
+    setAuthAlert('danger', 'You do not have access to that portal.');
+    panelId = defaultTabByRole[currentUser.role] ?? 'rolePanel';
+  }
+
   tabButtons.forEach((button) => {
     button.classList.toggle('active', button.dataset.tab === panelId);
   });
@@ -243,7 +333,7 @@ function renderSettingsList(category, target, items) {
 }
 
 async function loadReferenceList(category) {
-  const response = await fetch(`/api/reference/${category}`);
+  const response = await apiFetch(`/api/reference/${category}`);
 
   if (!response.ok) {
     throw new Error(`Unable to load ${category}`);
@@ -265,7 +355,7 @@ async function loadReferenceLists() {
 }
 
 async function addReferenceItem(category, value) {
-  const response = await fetch(`/api/reference/${category}`, {
+  const response = await apiFetch(`/api/reference/${category}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -283,7 +373,7 @@ async function addReferenceItem(category, value) {
 }
 
 async function deleteReferenceItem(category, value) {
-  const response = await fetch(`/api/reference/${category}/${encodeURIComponent(value)}`, {
+  const response = await apiFetch(`/api/reference/${category}/${encodeURIComponent(value)}`, {
     method: 'DELETE'
   });
 
@@ -335,7 +425,7 @@ async function loadTransactions() {
   `;
 
   try {
-    const response = await fetch('/api/transactions');
+    const response = await apiFetch('/api/transactions');
 
     if (!response.ok) {
       throw new Error('Unable to load transactions');
@@ -397,7 +487,7 @@ async function loadPrescriptions() {
   `;
 
   try {
-    const response = await fetch('/api/prescriptions');
+    const response = await apiFetch('/api/prescriptions');
 
     if (!response.ok) {
       throw new Error('Unable to load prescriptions');
@@ -456,7 +546,7 @@ async function searchMedicines(query) {
   lookupSource.textContent = trimmed.length < 2 ? 'Showing configured drug list...' : 'Searching medicines...';
 
   try {
-    const response = await fetch(`/api/medicines/search?q=${encodeURIComponent(trimmed)}`);
+    const response = await apiFetch(`/api/medicines/search?q=${encodeURIComponent(trimmed)}`);
 
     if (!response.ok) {
       throw new Error('Medicine lookup failed');
@@ -508,7 +598,7 @@ async function loadPrescriptionForPharmacy(id = lookupPrescriptionId.value, shou
   }
 
   try {
-    const response = await fetch(`/api/prescriptions/${encodeURIComponent(prescriptionId)}`);
+    const response = await apiFetch(`/api/prescriptions/${encodeURIComponent(prescriptionId)}`);
     const data = await response.json();
 
     if (!response.ok) {
@@ -663,7 +753,7 @@ function renderPrintPrescription(prescription) {
 
 async function savePrescriptionFromForm(message = 'Prescription saved and sent to pharmacy registry.') {
   const payload = getPrescriptionFormPayload();
-  const response = await fetch('/api/prescriptions', {
+  const response = await apiFetch('/api/prescriptions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -685,12 +775,99 @@ async function savePrescriptionFromForm(message = 'Prescription saved and sent t
   return data.prescription;
 }
 
+async function loadCurrentUser() {
+  if (!authToken) {
+    showLoggedOut();
+    return;
+  }
+
+  try {
+    const response = await apiFetch('/api/auth/me');
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Session invalid');
+    }
+
+    showLoggedIn(data.user);
+    await loadReferenceLists();
+  } catch (error) {
+    showLoggedOut();
+  }
+}
+
+async function submitAuthForm(endpoint, payload) {
+  const response = await apiFetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Authentication failed');
+  }
+
+  authToken = data.token;
+  window.localStorage.setItem('iadssAuthToken', authToken);
+  showLoggedIn(data.user);
+  await loadReferenceLists();
+}
+
 tabButtons.forEach((button) => {
   button.addEventListener('click', () => setActiveTab(button.dataset.tab));
 });
 
 document.querySelectorAll('.role-card').forEach((card) => {
   card.addEventListener('click', () => setActiveTab(card.dataset.tab));
+});
+
+loginForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const formData = new FormData(loginForm);
+
+  try {
+    await submitAuthForm('/api/auth/login', {
+      email: formData.get('email'),
+      password: formData.get('password')
+    });
+    loginForm.reset();
+    clearAlert(authAlertArea);
+  } catch (error) {
+    setAuthAlert('danger', 'Unable to log in.', error.message);
+  }
+});
+
+registerForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const formData = new FormData(registerForm);
+
+  try {
+    await submitAuthForm('/api/auth/register', {
+      name: formData.get('name'),
+      email: formData.get('email'),
+      password: formData.get('password'),
+      role: formData.get('role')
+    });
+    registerForm.reset();
+    clearAlert(authAlertArea);
+  } catch (error) {
+    setAuthAlert('danger', 'Unable to create account.', error.message);
+  }
+});
+
+logoutButton.addEventListener('click', async () => {
+  try {
+    if (authToken) {
+      await apiFetch('/api/auth/logout', {
+        method: 'POST'
+      });
+    }
+  } finally {
+    showLoggedOut();
+  }
 });
 
 drugInput.addEventListener('input', (event) => {
@@ -862,7 +1039,7 @@ document.addEventListener('click', async (event) => {
   if (cancelButton) {
     try {
       const id = cancelButton.dataset.cancelPrescription;
-      const response = await fetch(`/api/prescriptions/${encodeURIComponent(id)}/cancel`, {
+      const response = await apiFetch(`/api/prescriptions/${encodeURIComponent(id)}/cancel`, {
         method: 'POST'
       });
       const data = await response.json();
@@ -880,7 +1057,7 @@ document.addEventListener('click', async (event) => {
 
   if (printButton) {
     const id = printButton.dataset.printPrescription;
-    const response = await fetch(`/api/prescriptions/${encodeURIComponent(id)}`);
+    const response = await apiFetch(`/api/prescriptions/${encodeURIComponent(id)}`);
     const data = await response.json();
 
     if (response.ok) {
@@ -916,7 +1093,7 @@ form.addEventListener('submit', async (event) => {
   };
 
   try {
-    const response = await fetch('/api/transactions', {
+    const response = await apiFetch('/api/transactions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -981,7 +1158,7 @@ clearDataButton.addEventListener('click', async () => {
   clearDataButton.disabled = true;
 
   try {
-    const response = await fetch('/api/transactions', {
+    const response = await apiFetch('/api/transactions', {
       method: 'DELETE'
     });
 
@@ -999,6 +1176,4 @@ clearDataButton.addEventListener('click', async () => {
 });
 
 checkHealth();
-loadReferenceLists();
-loadTransactions();
-loadPrescriptions();
+loadCurrentUser();

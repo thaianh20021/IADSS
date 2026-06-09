@@ -23,6 +23,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -61,6 +65,31 @@ button:disabled {
   padding: 24px clamp(18px, 4vw, 48px);
   background: linear-gradient(90deg, var(--medical-blue) 0%, #006d8f 100%);
   color: #ffffff;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-menu span {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-locked .tab-bar,
+.auth-locked .tab-panel {
+  display: none;
 }
 
 .brand-block {
@@ -183,6 +212,12 @@ h1 {
   outline: none;
 }
 
+.role-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+}
+
 .role-icon {
   display: inline-grid;
   width: 54px;
@@ -216,6 +251,64 @@ h1 {
 
 .tab-panel.active {
   display: block;
+}
+
+.auth-panel {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: clamp(18px, 3vw, 30px);
+  box-shadow: 0 12px 28px rgba(23, 32, 51, 0.08);
+}
+
+.auth-panel[hidden] {
+  display: none;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.auth-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  background: #f8fbfe;
+  box-shadow: inset 4px 0 0 var(--medical-blue);
+}
+
+.auth-card h3 {
+  margin: 0;
+  color: var(--medical-blue-dark);
+  font-size: 20px;
+}
+
+.auth-card label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.auth-card input,
+.auth-card select {
+  min-height: 48px;
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+  outline: none;
+}
+
+.auth-card input:focus,
+.auth-card select:focus {
+  border-color: var(--medical-blue);
+  box-shadow: 0 0 0 3px rgba(114, 168, 232, 0.36);
 }
 
 .panel-heading {
@@ -1056,6 +1149,13 @@ tr.overridden-row:hover {
     flex-direction: column;
   }
 
+  .header-actions,
+  .user-menu {
+    align-items: stretch;
+    justify-content: flex-start;
+    flex-direction: column;
+  }
+
   .panel-actions {
     justify-content: stretch;
   }
@@ -1069,6 +1169,7 @@ tr.overridden-row:hover {
   }
 
   .role-grid,
+  .auth-grid,
   .inline-lookup,
   .override-fields {
     grid-template-columns: 1fr;

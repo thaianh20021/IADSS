@@ -5,12 +5,13 @@ MVP cho **IADSS (Integrated Drug Dispensing Surveillance System)**, được xâ
 ## Tính Năng
 
 - Màn hình đầu cho chọn vai trò: **Pharmacy**, **Doctor / Hospital**, hoặc **MOH**.
+- Có đăng ký/đăng nhập và phân quyền API theo vai trò: Pharmacy, Doctor / Hospital, MOH.
 - **Hospital / Doctor Portal** cho bác sĩ tạo toa thuốc hợp lệ, kèm chẩn đoán cơ bản, ICD-10, ghi chú lâm sàng và dị ứng thuốc.
 - **Pharmacy Portal** cho nhà thuốc nhập hoặc scan `Prescription ID / QR Code`, hệ thống tự tải thuốc, liều dùng, số lượng còn lại.
 - Toa in ra có QR code thật; Pharmacy có thể scan QR bằng camera trên Chrome/Safari. Chrome dùng native `BarcodeDetector` nếu có, Safari dùng fallback `jsQR`. Khi camera không khả dụng vẫn có thể nhập ID thủ công.
 - Trạng thái toa: `Valid`, `Partially Dispensed`, `Fully Dispensed`, `Expired`, `Cancelled`.
 - Cho phép bán từng phần. Nếu nhập số lượng bán ra lớn hơn số lượng còn lại, giao dịch bị block và được ghi vào dashboard.
-- **MOH Dashboard** hiển thị Approved, Blocked và misuse rate.
+- **MOH Dashboard** hiển thị Approved, Blocked và các chỉ số intervention/invalid attempt.
 - **MOH Dashboard** tách `Intervention Rate` và `Invalid Attempt Rate`.
 - **Audited Override** cho phép dược sĩ bypass giao dịch bị block chỉ khi nhập license cá nhân và lý do, để lại audit trace cho MOH.
 - **Settings** cho thêm/xóa hoặc bulk import danh sách thuốc và nhóm thuốc.
@@ -28,8 +29,9 @@ Mở `http://localhost:3000`.
 
 ## Checklist Test Local
 
-1. Vào màn hình đầu và chọn **Doctor / Hospital**.
-2. Tạo một toa thuốc:
+1. Tạo 3 tài khoản test: một tài khoản **Doctor / Hospital**, một tài khoản **Pharmacy**, và một tài khoản **MOH**.
+2. Đăng nhập bằng tài khoản **Doctor / Hospital**, rồi mở **Hospital / Doctor Portal**.
+3. Tạo một toa thuốc:
    - Prescription ID: `RX-2026-0001`
    - Patient ID: `12345`
    - Hospital / Clinic: `National General Hospital`
@@ -41,16 +43,17 @@ Mở `http://localhost:3000`.
    - Quantity Limit: `20`
    - Treatment Duration: `5`
    - Expiry Date: chọn ngày trong tương lai
-3. Chọn **Pharmacy**.
-4. Load `RX-2026-0001`, nhập `Dispense Quantity = 10`, bấm **Mark as Dispensed**.
-5. Xác nhận alert xanh: `Transaction Approved. Data synced to MOH.`
-6. Load lại toa đó, nhập `Dispense Quantity = 11`.
-7. Xác nhận alert đỏ vì toa chỉ còn `10` viên.
-8. Nhập `Dispense Quantity = 10` để bán nốt phần còn lại.
-9. Load lại toa và xác nhận trạng thái thành `Fully Dispensed`.
-10. Chọn **MOH Dashboard** và kiểm tra transaction Approved/Blocked, misuse rate, row Blocked nền đỏ nhạt.
-11. Vào **Settings** để thêm/xóa hoặc bulk import thuốc/drug class.
-12. Bấm `Clear Data` nếu muốn reset transaction history cho lần test tiếp theo.
+4. Đăng xuất, đăng nhập bằng tài khoản **Pharmacy**.
+5. Load `RX-2026-0001`, nhập `Dispense Quantity = 10`, bấm **Mark as Dispensed**.
+6. Xác nhận alert xanh: `Transaction Approved. Data synced to MOH.`
+7. Load lại toa đó, nhập `Dispense Quantity = 11`.
+8. Xác nhận alert đỏ vì toa chỉ còn `10` viên.
+9. Nhập `Dispense Quantity = 10` để bán nốt phần còn lại.
+10. Load lại toa và xác nhận trạng thái thành `Fully Dispensed`.
+11. Đăng xuất, đăng nhập bằng tài khoản **MOH**.
+12. Mở **MOH Dashboard** và kiểm tra transaction Approved/Blocked, intervention rate, row Blocked nền đỏ nhạt.
+13. Vào **Settings** để thêm/xóa hoặc bulk import thuốc/drug class.
+14. Bấm `Clear Data` nếu muốn reset transaction history cho lần test tiếp theo.
 
 Chạy smoke test tự động:
 
@@ -58,7 +61,7 @@ Chạy smoke test tự động:
 npm run smoke
 ```
 
-Smoke test kiểm tra health, reference lists, doctor-created prescription, pharmacy lookup privacy, partial dispensing, block khi vượt remaining quantity, dashboard misuse rate và medicine lookup.
+Smoke test kiểm tra health, đăng ký/đăng nhập, phân quyền API theo role, reference lists, doctor-created prescription, pharmacy lookup privacy, partial dispensing, block khi vượt remaining quantity, dashboard intervention rate và medicine lookup.
 
 ## Flow Hospital-To-Pharmacy
 
@@ -147,6 +150,10 @@ npm run smoke -- https://your-iadss-service.onrender.com
 ## API Chính
 
 - `GET /api/health`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
 - `GET /api/prescriptions`
 - `GET /api/prescriptions/:prescriptionId`
 - `POST /api/prescriptions`

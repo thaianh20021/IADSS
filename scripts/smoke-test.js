@@ -5,12 +5,14 @@ function normalizeBaseUrl(value) {
 }
 
 async function request(path, options = {}) {
+  const { token, headers, ...fetchOptions } = options;
   const response = await fetch(`${baseUrl}${path}`, {
-    ...options,
+    ...fetchOptions,
     headers: {
       Accept: 'application/json',
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(options.headers ?? {})
+      ...(fetchOptions.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(headers ?? {})
     }
   });
 
@@ -40,17 +42,34 @@ async function main() {
   assert(health.ok === true, 'Health check did not return ok=true.');
   console.log('OK health check');
 
-  const drugs = await request('/api/reference/drugs');
+  const auth = {};
+  for (const role of ['pharmacy', 'doctor', 'moh']) {
+    const response = await request('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `Smoke ${role}`,
+        email: `smoke-${role}-${runId}@iadss.test`,
+        password: 'password123',
+        role
+      })
+    });
+    auth[role] = response.token;
+    assert(response.user.role === role, `Could not register ${role} smoke user.`);
+  }
+  console.log('OK auth roles registered');
+
+  const drugs = await request('/api/reference/drugs', { token: auth.doctor });
   assert(drugs.items.includes('Amoxicillin'), 'Drug reference list is missing Amoxicillin.');
-  const drugClasses = await request('/api/reference/drugClasses');
+  const drugClasses = await request('/api/reference/drugClasses', { token: auth.doctor });
   assert(drugClasses.items.includes('Penicillin'), 'Drug class reference list is missing Penicillin.');
   console.log('OK reference lists loaded');
 
-  await request('/api/transactions', { method: 'DELETE' });
+  await request('/api/transactions', { method: 'DELETE', token: auth.moh });
   console.log('OK cleared previous transactions');
 
   const doctorPrescription = await request('/api/prescriptions', {
     method: 'POST',
+    token: auth.doctor,
     body: JSON.stringify({
       prescriptionId: cefiximePrescriptionId,
       patientId: '88888',
@@ -71,13 +90,14 @@ async function main() {
   assert(doctorPrescription.prescription.patientId === '88888', 'Doctor prescription was not saved.');
   console.log('OK doctor prescription saved');
 
-  const lookup = await request(`/api/prescriptions/${cefiximePrescriptionId}`);
+  const lookup = await request(`/api/prescriptions/${cefiximePrescriptionId}`, { token: auth.pharmacy });
   assert(lookup.prescription.remainingQuantity === 14, 'Pharmacy lookup did not return remaining quantity.');
   assert(lookup.prescription.clinicalNotes === undefined, 'Pharmacy lookup leaked clinical notes.');
   console.log('OK pharmacy lookup returns minimum necessary data');
 
   const doctorApproved = await request('/api/transactions', {
     method: 'POST',
+    token: auth.pharmacy,
     body: JSON.stringify({
       prescriptionId: cefiximePrescriptionId,
       quantity: 7
@@ -89,6 +109,7 @@ async function main() {
 
   const repeated = await request('/api/transactions', {
     method: 'POST',
+    token: auth.pharmacy,
     body: JSON.stringify({
       prescriptionId: cefiximePrescriptionId,
       quantity: 8
@@ -100,6 +121,7 @@ async function main() {
 
   const remaining = await request('/api/transactions', {
     method: 'POST',
+    token: auth.pharmacy,
     body: JSON.stringify({
       prescriptionId: cefiximePrescriptionId,
       quantity: 7
@@ -110,6 +132,7 @@ async function main() {
 
   const amoxicillinPrescription = await request('/api/prescriptions', {
     method: 'POST',
+    token: auth.doctor,
     body: JSON.stringify({
       prescriptionId: amoxicillinPrescriptionId,
       patientId: '12345',
@@ -128,6 +151,7 @@ async function main() {
 
   const approved = await request('/api/transactions', {
     method: 'POST',
+    token: auth.pharmacy,
     body: JSON.stringify({
       prescriptionId: amoxicillinPrescriptionId,
       quantity: 10
@@ -138,6 +162,7 @@ async function main() {
 
   const override = await request('/api/transactions', {
     method: 'POST',
+    token: auth.pharmacy,
     body: JSON.stringify({
       prescriptionId: amoxicillinPrescriptionId,
       quantity: 11,
@@ -152,6 +177,7 @@ async function main() {
 
   const blocked = await request('/api/transactions', {
     method: 'POST',
+    token: auth.pharmacy,
     body: JSON.stringify({
       prescriptionId: `SMOKE-INVALID-${runId}`,
       quantity: 1
@@ -160,7 +186,7 @@ async function main() {
   assert(blocked.transaction.status === 'Blocked', 'Invalid transaction was not blocked.');
   console.log('OK invalid transaction blocked');
 
-  const history = await request('/api/transactions');
+  const history = await request('/api/transactions', { token: auth.moh });
   const transactions = history.transactions ?? [];
   const approvedCount = transactions.filter((item) => item.status === 'Approved').length;
   const blockedCount = transactions.filter((item) => item.status === 'Blocked').length;
@@ -174,7 +200,7 @@ async function main() {
   assert(interventionRate === 50, `Expected intervention rate 50, got ${interventionRate}.`);
   console.log('OK dashboard data supports 50% intervention rate with blocked and overridden attempts');
 
-  const medicines = await request('/api/medicines/search?q=cephalexin');
+  const medicines = await request('/api/medicines/search?q=cephalexin', { token: auth.pharmacy });
   assert(Array.isArray(medicines.results), 'Medicine search did not return results array.');
   assert(medicines.results.length > 0, 'Medicine search returned no results.');
   console.log(`OK medicine lookup source: ${medicines.source}`);

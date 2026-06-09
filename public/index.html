@@ -6,7 +6,7 @@
     <title>IADSS</title>
     <link rel="stylesheet" href="/style.css">
   </head>
-  <body>
+  <body class="auth-locked">
     <header class="app-header">
       <div class="brand-block">
         <div class="brand-mark" aria-hidden="true">+</div>
@@ -15,7 +15,13 @@
           <p>Integrated Drug Dispensing Surveillance System</p>
         </div>
       </div>
-      <div class="system-status" id="systemStatus">Checking system</div>
+      <div class="header-actions">
+        <div class="system-status" id="systemStatus">Checking system</div>
+        <div class="user-menu" id="userMenu" hidden>
+          <span id="currentUserLabel"></span>
+          <button class="ghost-button" id="logoutButton" type="button">Log Out</button>
+        </div>
+      </div>
     </header>
 
     <nav class="tab-bar" aria-label="Primary views">
@@ -28,6 +34,55 @@
     </nav>
 
     <main class="app-shell">
+      <section class="auth-panel" id="authPanel">
+        <div class="panel-heading">
+          <h2>Sign In To IADSS</h2>
+          <span class="panel-chip">Role-based access</span>
+        </div>
+
+        <div class="auth-grid">
+          <form class="auth-card" id="loginForm">
+            <h3>Log In</h3>
+            <label>
+              <span>Email</span>
+              <input name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+            </label>
+            <label>
+              <span>Password</span>
+              <input name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+            </label>
+            <button class="primary-button" type="submit">Log In</button>
+          </form>
+
+          <form class="auth-card" id="registerForm">
+            <h3>Create Account</h3>
+            <label>
+              <span>Full Name</span>
+              <input name="name" type="text" placeholder="Your name" autocomplete="name" required>
+            </label>
+            <label>
+              <span>Email</span>
+              <input name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+            </label>
+            <label>
+              <span>Password</span>
+              <input name="password" type="password" placeholder="At least 6 characters" autocomplete="new-password" required>
+            </label>
+            <label>
+              <span>Role</span>
+              <select name="role" required>
+                <option value="pharmacy">Pharmacy</option>
+                <option value="doctor">Doctor / Hospital</option>
+                <option value="moh">MOH</option>
+              </select>
+            </label>
+            <button class="primary-button" type="submit">Create Account</button>
+          </form>
+        </div>
+
+        <div class="alert-area" id="authAlertArea" role="status" aria-live="polite"></div>
+      </section>
+
       <section class="tab-panel active" id="rolePanel">
         <div class="panel-heading">
           <h2>Select Portal</h2>
@@ -359,6 +414,11 @@
           </section>
 
           <section class="doc-block">
+            <h3>Authentication</h3>
+            <code>Authorization: Bearer &lt;session-token&gt;</code>
+          </section>
+
+          <section class="doc-block">
             <h3>Lookup Endpoint</h3>
             <code>GET /api/prescriptions/:prescriptionId</code>
           </section>
@@ -370,7 +430,10 @@
 
           <section class="doc-block wide">
             <h3>Example Request</h3>
-<pre><code>{
+<pre><code>POST /api/transactions
+Authorization: Bearer &lt;pharmacy-token&gt;
+
+{
   "prescriptionId": "RX-2026-0001",
   "quantity": 5
 }</code></pre>

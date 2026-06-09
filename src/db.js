@@ -607,6 +607,26 @@ class PostgresDatabase {
       );
     `);
 
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL CHECK (role IN ('pharmacy', 'doctor', 'moh')),
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        token TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL
+      );
+    `);
+
     await this.removeLegacyDemoPrescriptions();
 
     await this.seedReferenceItems('drugs', FALLBACK_DRUGS);
@@ -953,6 +973,78 @@ class PostgresDatabase {
     await this.pool.query('DELETE FROM transactions;');
   }
 
+  async createUser(user) {
+    const result = await this.pool.query(
+      `
+        INSERT INTO users (name, email, role, password_hash)
+        VALUES ($1, LOWER($2), $3, $4)
+        RETURNING
+          id,
+          name,
+          email,
+          role,
+          created_at AS "createdAt";
+      `,
+      [user.name, user.email, user.role, user.passwordHash]
+    );
+
+    return result.rows[0];
+  }
+
+  async findUserByEmail(email) {
+    const result = await this.pool.query(
+      `
+        SELECT
+          id,
+          name,
+          email,
+          role,
+          password_hash AS "passwordHash",
+          created_at AS "createdAt"
+        FROM users
+        WHERE email = LOWER($1)
+        LIMIT 1;
+      `,
+      [email]
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async createSession(session) {
+    await this.pool.query(
+      `
+        INSERT INTO user_sessions (token, user_id, expires_at)
+        VALUES ($1, $2, $3);
+      `,
+      [session.token, session.userId, session.expiresAt]
+    );
+  }
+
+  async findUserBySessionToken(token) {
+    const result = await this.pool.query(
+      `
+        SELECT
+          u.id,
+          u.name,
+          u.email,
+          u.role,
+          u.created_at AS "createdAt"
+        FROM user_sessions s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.token = $1 AND s.expires_at > NOW()
+        LIMIT 1;
+      `,
+      [token]
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async deleteSession(token) {
+    await this.pool.query('DELETE FROM user_sessions WHERE token = $1;', [token]);
+  }
+
   async getReferenceList(category) {
     const normalizedCategory = normalizeReferenceCategory(category);
     const result = await this.pool.query(
@@ -1066,6 +1158,10 @@ class JsonFileDatabase {
     if (this.migrateReferenceLists()) {
       await this.persist();
     }
+
+    if (this.migrateAuthState()) {
+      await this.persist();
+    }
   }
 
   createEmptyState() {
@@ -1077,11 +1173,14 @@ class JsonFileDatabase {
         drugs: uniqueSorted(FALLBACK_DRUGS),
         drugClasses: uniqueSorted(DEFAULT_DRUG_CLASSES)
       },
+      users: [],
+      sessions: [],
       metadata: {
         referenceSeedVersion: REFERENCE_SEED_VERSION
       },
       counters: {
-        transactions: 1
+        transactions: 1,
+        users: 1
       }
     };
   }
@@ -1150,6 +1249,33 @@ class JsonFileDatabase {
 
       return merged;
     });
+
+    return changed;
+  }
+
+  migrateAuthState() {
+    let changed = false;
+
+    if (!Array.isArray(this.state.users)) {
+      this.state.users = [];
+      changed = true;
+    }
+
+    if (!Array.isArray(this.state.sessions)) {
+      this.state.sessions = [];
+      changed = true;
+    }
+
+    if (!this.state.counters || typeof this.state.counters !== 'object') {
+      this.state.counters = {};
+      changed = true;
+    }
+
+    if (!Number.isInteger(this.state.counters.users)) {
+      const maxUserId = this.state.users.reduce((max, user) => Math.max(max, Number(user.id) || 0), 0);
+      this.state.counters.users = maxUserId + 1;
+      changed = true;
+    }
 
     return changed;
   }
@@ -1341,6 +1467,76 @@ class JsonFileDatabase {
 
   async clearTransactions() {
     this.state.transactions = [];
+    await this.persist();
+  }
+
+  async createUser(user) {
+    const normalizedEmail = normalizeText(user.email).toLowerCase();
+    const saved = {
+      id: this.state.counters.users,
+      name: normalizeText(user.name),
+      email: normalizedEmail,
+      role: user.role,
+      passwordHash: user.passwordHash,
+      createdAt: new Date().toISOString()
+    };
+
+    this.state.counters.users += 1;
+    this.state.users.push(saved);
+    await this.persist();
+
+    return clone({
+      id: saved.id,
+      name: saved.name,
+      email: saved.email,
+      role: saved.role,
+      createdAt: saved.createdAt
+    });
+  }
+
+  async findUserByEmail(email) {
+    const normalizedEmail = normalizeText(email).toLowerCase();
+    const user = this.state.users.find((item) => item.email === normalizedEmail);
+    return user ? clone(user) : null;
+  }
+
+  async createSession(session) {
+    this.state.sessions.push({
+      token: session.token,
+      userId: session.userId,
+      createdAt: new Date().toISOString(),
+      expiresAt: session.expiresAt
+    });
+    await this.persist();
+  }
+
+  async findUserBySessionToken(token) {
+    const now = Date.now();
+    const session = this.state.sessions.find((item) => {
+      return item.token === token && new Date(item.expiresAt).getTime() > now;
+    });
+
+    if (!session) {
+      return null;
+    }
+
+    const user = this.state.users.find((item) => item.id === session.userId);
+
+    if (!user) {
+      return null;
+    }
+
+    return clone({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt
+    });
+  }
+
+  async deleteSession(token) {
+    this.state.sessions = this.state.sessions.filter((session) => session.token !== token);
     await this.persist();
   }
 
