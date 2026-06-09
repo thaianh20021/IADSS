@@ -7,7 +7,7 @@ MVP cho **IADSS (Integrated Drug Dispensing Surveillance System)**, được xâ
 - Màn hình đầu cho chọn vai trò: **Pharmacy**, **Doctor / Hospital**, hoặc **MOH**.
 - **Hospital / Doctor Portal** cho bác sĩ tạo toa thuốc hợp lệ, kèm chẩn đoán cơ bản, ICD-10, ghi chú lâm sàng và dị ứng thuốc.
 - **Pharmacy Portal** cho nhà thuốc nhập hoặc scan `Prescription ID / QR Code`, hệ thống tự tải thuốc, liều dùng, số lượng còn lại.
-- Toa in ra có QR code thật; Pharmacy có thể scan QR bằng camera nếu trình duyệt hỗ trợ, hoặc nhập ID thủ công.
+- Toa in ra có QR code thật; Pharmacy có thể scan QR bằng camera trên Chrome/Safari. Chrome dùng native `BarcodeDetector` nếu có, Safari dùng fallback `jsQR`. Khi camera không khả dụng vẫn có thể nhập ID thủ công.
 - Trạng thái toa: `Valid`, `Partially Dispensed`, `Fully Dispensed`, `Expired`, `Cancelled`.
 - Cho phép bán từng phần. Nếu nhập số lượng bán ra lớn hơn số lượng còn lại, giao dịch bị block và được ghi vào dashboard.
 - **MOH Dashboard** hiển thị Approved, Blocked và misuse rate.

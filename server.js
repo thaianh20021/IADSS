@@ -12,6 +12,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const JSQR_DIST_DIR = path.join(__dirname, 'node_modules', 'jsqr', 'dist');
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 const REFERENCE_CATEGORIES = new Set(['drugs', 'drugClasses', 'antibiotics', 'antibioticClasses']);
 const PRESCRIPTION_STATUS = {
@@ -543,6 +544,7 @@ export async function createApp(options = {}) {
   app.locals.db = db;
 
   app.use(express.json());
+  app.use('/vendor/jsqr', express.static(JSQR_DIST_DIR));
   app.use(express.static(PUBLIC_DIR));
 
   app.get('/api/health', (request, response) => {

@@ -47,6 +47,10 @@ let currentMedicineResults = [];
 let lastSavedPrescription = null;
 let qrScanStream = null;
 let qrScanTimer = null;
+const qrCanvas = document.createElement('canvas');
+const qrCanvasContext = qrCanvas.getContext('2d', {
+  willReadFrequently: true
+});
 let referenceLists = {
   drugs: [],
   drugClasses: []
@@ -538,9 +542,38 @@ function stopQrScanner() {
   qrScannerVideo.srcObject = null;
 }
 
+async function detectQrCodeFromVideo(detector) {
+  if (detector) {
+    const codes = await detector.detect(qrScannerVideo);
+    return codes[0]?.rawValue?.trim() || '';
+  }
+
+  if (!window.jsQR || !qrCanvasContext || qrScannerVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    return '';
+  }
+
+  qrCanvas.width = qrScannerVideo.videoWidth;
+  qrCanvas.height = qrScannerVideo.videoHeight;
+
+  if (!qrCanvas.width || !qrCanvas.height) {
+    return '';
+  }
+
+  qrCanvasContext.drawImage(qrScannerVideo, 0, 0, qrCanvas.width, qrCanvas.height);
+  const imageData = qrCanvasContext.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+  const code = window.jsQR(imageData.data, imageData.width, imageData.height, {
+    inversionAttempts: 'dontInvert'
+  });
+
+  return code?.data?.trim() || '';
+}
+
 async function startQrScanner() {
-  if (!('BarcodeDetector' in window)) {
-    setAlert('danger', 'QR scanning is not supported in this browser.', 'Please type the Prescription ID manually.');
+  const supportsBarcodeDetector = 'BarcodeDetector' in window;
+  const supportsJsQr = typeof window.jsQR === 'function';
+
+  if (!supportsBarcodeDetector && !supportsJsQr) {
+    setAlert('danger', 'QR scanning is not available.', 'Please type the Prescription ID manually.');
     return;
   }
 
@@ -552,7 +585,9 @@ async function startQrScanner() {
   try {
     stopQrScanner();
     qrScanner.hidden = false;
-    qrScannerStatus.textContent = 'Point camera at the prescription QR code.';
+    qrScannerStatus.textContent = supportsBarcodeDetector
+      ? 'Point camera at the prescription QR code.'
+      : 'Point camera at the QR code. Safari fallback scanner is active.';
     qrScanStream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'environment'
@@ -562,11 +597,10 @@ async function startQrScanner() {
     qrScannerVideo.srcObject = qrScanStream;
     await qrScannerVideo.play();
 
-    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const detector = supportsBarcodeDetector ? new BarcodeDetector({ formats: ['qr_code'] }) : null;
     qrScanTimer = window.setInterval(async () => {
       try {
-        const codes = await detector.detect(qrScannerVideo);
-        const value = codes[0]?.rawValue?.trim();
+        const value = await detectQrCodeFromVideo(detector);
 
         if (!value) {
           return;
