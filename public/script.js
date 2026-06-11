@@ -52,6 +52,22 @@ const printPrescription = document.querySelector('#printPrescription');
 const printPrescriptionId = document.querySelector('#printPrescriptionId');
 const printPrescriptionDetails = document.querySelector('#printPrescriptionDetails');
 const qrImage = document.querySelector('#qrImage');
+const authRoleCards = document.querySelectorAll('.auth-role-card');
+const authRoleHint = document.querySelector('#authRoleHint');
+const globalSearchInput = document.querySelector('#globalSearchInput');
+const notificationsButton = document.querySelector('#notificationsButton');
+const settingsShortcutButton = document.querySelector('#settingsShortcutButton');
+const helpButton = document.querySelector('#helpButton');
+const supportButton = document.querySelector('#supportButton');
+const utilityPanel = document.querySelector('#utilityPanel');
+const utilityTitle = document.querySelector('#utilityTitle');
+const utilityBody = document.querySelector('#utilityBody');
+const utilityCloseButton = document.querySelector('#utilityCloseButton');
+const dashboardRoleFilter = document.querySelector('#dashboardRoleFilter');
+const dashboardDateFilter = document.querySelector('#dashboardDateFilter');
+const dashboardFilterButton = document.querySelector('#dashboardFilterButton');
+const exportReportButton = document.querySelector('#exportReportButton');
+const overrideDispenseButton = document.querySelector('#overrideDispenseButton');
 
 let lookupTimer = null;
 let currentMedicineResults = [];
@@ -60,6 +76,7 @@ let qrScanStream = null;
 let qrScanTimer = null;
 let authToken = window.localStorage.getItem('iadssAuthToken') || '';
 let currentUser = null;
+let dashboardTransactions = [];
 const qrCanvas = document.createElement('canvas');
 const qrCanvasContext = qrCanvas.getContext('2d', {
   willReadFrequently: true
@@ -444,10 +461,153 @@ async function checkHealth() {
   }
 }
 
+function openUtilityPanel(title, html) {
+  if (!utilityPanel || !utilityTitle || !utilityBody) {
+    return;
+  }
+
+  utilityTitle.textContent = title;
+  utilityBody.innerHTML = html;
+  utilityPanel.hidden = false;
+}
+
+function closeUtilityPanel() {
+  if (utilityPanel) {
+    utilityPanel.hidden = true;
+  }
+}
+
+function getFilteredDashboardTransactions() {
+  const role = dashboardRoleFilter?.value ?? 'all';
+  const dateRange = dashboardDateFilter?.value ?? 'all';
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  return dashboardTransactions.filter((transaction) => {
+    if (role !== 'all') {
+      if (role !== 'pharmacy' || !transaction.pharmacyId) {
+        return false;
+      }
+    }
+
+    if (dateRange !== 'all') {
+      const timestamp = new Date(transaction.timestamp).getTime();
+      if (!Number.isFinite(timestamp)) {
+        return false;
+      }
+      const maxAge = dateRange === 'today' ? dayMs : dateRange === '7d' ? 7 * dayMs : 30 * dayMs;
+      if (now - timestamp > maxAge) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+function renderDashboardTransactions(transactions) {
+  updateMetrics(transactions);
+
+  if (transactions.length === 0) {
+    rows.innerHTML = `
+      <tr>
+        <td colspan="13" class="empty-cell">No transactions match the current filters.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  rows.innerHTML = transactions
+    .map((transaction) => {
+      const isBlocked = transaction.status === 'Blocked';
+      const isOverridden = transaction.status === 'Overridden';
+      const statusClass = isBlocked ? 'blocked' : isOverridden ? 'overridden' : 'approved';
+      const prescriptionStatusClass = getStatusClass(transaction.prescriptionStatus);
+
+      return `
+        <tr class="${isBlocked ? 'blocked-row' : isOverridden ? 'overridden-row' : ''}">
+          <td>${escapeHtml(formatTimestamp(transaction.timestamp))}</td>
+          <td>${escapeHtml(transaction.pharmacyId || 'N/A')}</td>
+          <td>${escapeHtml(transaction.prescriptionId || 'N/A')}</td>
+          <td>${escapeHtml(transaction.patientId || 'N/A')}</td>
+          <td>${escapeHtml(transaction.hospitalName || 'N/A')}</td>
+          <td>${escapeHtml(transaction.antibiotic || 'N/A')}</td>
+          <td>${escapeHtml(transaction.quantity || 'N/A')}</td>
+          <td>${escapeHtml(transaction.treatmentDurationDays || 'N/A')}</td>
+          <td><span class="status-badge ${prescriptionStatusClass}">${escapeHtml(transaction.prescriptionStatus || 'Invalid')}</span></td>
+          <td><span class="status-badge ${statusClass}">${escapeHtml(transaction.status)}</span></td>
+          <td>${escapeHtml(transaction.reason || 'N/A')}</td>
+          <td>${escapeHtml(transaction.pharmacistLicense || 'N/A')}</td>
+          <td>${escapeHtml(transaction.overrideReason || 'N/A')}</td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
+function refreshDashboardFilters() {
+  renderDashboardTransactions(getFilteredDashboardTransactions());
+}
+
+function exportDashboardCsv() {
+  const transactions = getFilteredDashboardTransactions();
+  const headers = ['Timestamp', 'Pharmacy ID', 'Prescription ID', 'Patient ID', 'Hospital / Clinic', 'Drug', 'Quantity', 'Duration', 'Rx Status', 'Status', 'Reason', 'Pharmacist', 'Override Reason'];
+  const dataRows = transactions.map((transaction) => [transaction.timestamp, transaction.pharmacyId, transaction.prescriptionId, transaction.patientId, transaction.hospitalName, transaction.antibiotic, transaction.quantity, transaction.treatmentDurationDays, transaction.prescriptionStatus, transaction.status, transaction.reason, transaction.pharmacistLicense, transaction.overrideReason]);
+  const csv = [headers, ...dataRows]
+    .map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `iadss-report-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setDashboardAlert('success', `${transactions.length} transaction(s) exported.`);
+}
+
+function applyGlobalSearch(query) {
+  const normalized = String(query ?? '').trim().toLowerCase();
+  document.querySelectorAll('.table-wrap tbody tr').forEach((row) => {
+    row.hidden = normalized ? !row.textContent.toLowerCase().includes(normalized) : false;
+  });
+}
+
+function renderNotifications() {
+  const risky = dashboardTransactions.filter((transaction) => ['Blocked', 'Overridden'].includes(transaction.status)).slice(0, 8);
+  const items = risky.length === 0
+    ? '<p>No blocked or overridden transactions loaded.</p>'
+    : `<ul class="utility-list">${risky.map((transaction) => `<li><strong>${escapeHtml(transaction.status)}</strong><span>${escapeHtml(transaction.prescriptionId || 'N/A')} - ${escapeHtml(transaction.reason || 'No reason')}</span></li>`).join('')}</ul>`;
+  openUtilityPanel('Notifications', items);
+}
+
+function showHelpPanel() {
+  openUtilityPanel('Support', `
+    <div class="support-grid">
+      <button type="button" data-help-tab="apiDocsPanel"><span class="material-symbols-outlined">api</span><strong>POS API Docs</strong><small>Open integration docs.</small></button>
+      <button type="button" data-help-tab="settingsPanel"><span class="material-symbols-outlined">settings</span><strong>Reference Lists</strong><small>Manage drugs and classes if authorized.</small></button>
+      <button type="button" data-help-action="lookup"><span class="material-symbols-outlined">qr_code_scanner</span><strong>Pharmacy Lookup</strong><small>Focus prescription lookup.</small></button>
+    </div>
+  `);
+}
+
+function selectAuthRole(role) {
+  authRoleCards.forEach((card) => card.classList.toggle('selected', card.dataset.authRole === role));
+  if (registerForm.elements.role) {
+    registerForm.elements.role.value = role;
+  }
+  const labels = { doctor: 'Doctor / Hospital', pharmacy: 'Pharmacy', moh: 'MOH' };
+  if (authRoleHint) {
+    authRoleHint.textContent = `${labels[role]} selected. Register will use this role.`;
+  }
+}
+
 async function loadTransactions() {
   rows.innerHTML = `
     <tr>
-      <td colspan="12" class="empty-cell">Loading transactions...</td>
+      <td colspan="13" class="empty-cell">Loading transactions...</td>
     </tr>
   `;
 
@@ -459,45 +619,10 @@ async function loadTransactions() {
     }
 
     const data = await response.json();
-    const transactions = data.transactions ?? [];
-    updateMetrics(transactions);
-
-    if (transactions.length === 0) {
-      rows.innerHTML = `
-        <tr>
-          <td colspan="13" class="empty-cell">No transactions recorded.</td>
-        </tr>
-      `;
-      return;
-    }
-
-    rows.innerHTML = transactions
-      .map((transaction) => {
-        const isBlocked = transaction.status === 'Blocked';
-        const isOverridden = transaction.status === 'Overridden';
-        const statusClass = isBlocked ? 'blocked' : isOverridden ? 'overridden' : 'approved';
-        const prescriptionStatusClass = getStatusClass(transaction.prescriptionStatus);
-
-        return `
-          <tr class="${isBlocked ? 'blocked-row' : isOverridden ? 'overridden-row' : ''}">
-            <td>${escapeHtml(formatTimestamp(transaction.timestamp))}</td>
-            <td>${escapeHtml(transaction.pharmacyId || 'N/A')}</td>
-            <td>${escapeHtml(transaction.prescriptionId || 'N/A')}</td>
-            <td>${escapeHtml(transaction.patientId || 'N/A')}</td>
-            <td>${escapeHtml(transaction.hospitalName || 'N/A')}</td>
-            <td>${escapeHtml(transaction.antibiotic || 'N/A')}</td>
-            <td>${escapeHtml(transaction.quantity || 'N/A')}</td>
-            <td>${escapeHtml(transaction.treatmentDurationDays || 'N/A')}</td>
-            <td><span class="status-badge ${prescriptionStatusClass}">${escapeHtml(transaction.prescriptionStatus || 'Invalid')}</span></td>
-            <td><span class="status-badge ${statusClass}">${escapeHtml(transaction.status)}</span></td>
-            <td>${escapeHtml(transaction.reason || 'N/A')}</td>
-            <td>${escapeHtml(transaction.pharmacistLicense || 'N/A')}</td>
-            <td>${escapeHtml(transaction.overrideReason || 'N/A')}</td>
-          </tr>
-        `;
-      })
-      .join('');
+    dashboardTransactions = data.transactions ?? [];
+    renderDashboardTransactions(getFilteredDashboardTransactions());
   } catch (error) {
+    dashboardTransactions = [];
     updateMetrics([]);
     rows.innerHTML = `
       <tr>
@@ -594,7 +719,7 @@ function renderLoadedPrescription(prescription) {
   loadedPrescriptionSummary.innerHTML = `
     <div>
       <strong>${escapeHtml(prescription.drugName)}</strong>
-      <span>${escapeHtml(prescription.dosage)} · ${escapeHtml(prescription.drugClass)}</span>
+      <span>${escapeHtml(prescription.dosage)} Â· ${escapeHtml(prescription.drugClass)}</span>
     </div>
     <div>
       <span class="status-badge ${getStatusClass(prescription.prescriptionStatus)}">${escapeHtml(prescription.prescriptionStatus)}</span>
@@ -1201,9 +1326,9 @@ clearDataButton.addEventListener('click', async () => {
     }
 
     await loadTransactions();
-    setAlert('success', 'Transaction history cleared.');
+    setDashboardAlert('success', 'Transaction history cleared.');
   } catch (error) {
-    setAlert('danger', 'Unable to clear transaction history.');
+    setDashboardAlert('danger', 'Unable to clear transaction history.');
   } finally {
     clearDataButton.disabled = false;
   }
@@ -1243,5 +1368,82 @@ clearUsersButton.addEventListener('click', async () => {
   }
 });
 
+authRoleCards.forEach((card) => {
+  card.addEventListener('click', () => {
+    selectAuthRole(card.dataset.authRole);
+    setAuthMode('register');
+  });
+});
+
+utilityCloseButton?.addEventListener('click', closeUtilityPanel);
+utilityPanel?.addEventListener('click', (event) => {
+  if (event.target === utilityPanel) {
+    closeUtilityPanel();
+  }
+});
+
+notificationsButton?.addEventListener('click', async () => {
+  if (currentUser?.role === 'moh' && dashboardTransactions.length === 0) {
+    await loadTransactions();
+  }
+  renderNotifications();
+});
+
+settingsShortcutButton?.addEventListener('click', () => {
+  if (currentUser && canAccessTab('settingsPanel')) {
+    setActiveTab('settingsPanel');
+  } else {
+    openUtilityPanel('Settings unavailable', '<p>Your current role cannot manage reference settings.</p>');
+  }
+});
+
+helpButton?.addEventListener('click', showHelpPanel);
+supportButton?.addEventListener('click', showHelpPanel);
+
+globalSearchInput?.addEventListener('input', (event) => {
+  const query = event.target.value;
+  if (document.querySelector('.tab-panel.active')?.id === 'posPanel') {
+    lookupPrescriptionId.value = query;
+  } else {
+    applyGlobalSearch(query);
+  }
+});
+
+globalSearchInput?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && document.querySelector('.tab-panel.active')?.id === 'posPanel') {
+    event.preventDefault();
+    loadPrescriptionForPharmacy(globalSearchInput.value);
+  }
+});
+
+dashboardRoleFilter?.addEventListener('change', refreshDashboardFilters);
+dashboardDateFilter?.addEventListener('change', refreshDashboardFilters);
+dashboardFilterButton?.addEventListener('click', () => dashboardRoleFilter?.focus());
+exportReportButton?.addEventListener('click', exportDashboardCsv);
+
+overrideDispenseButton?.addEventListener('click', () => {
+  document.querySelector('#overrideBlocked').checked = true;
+  form.requestSubmit();
+});
+
+document.addEventListener('click', (event) => {
+  const proxy = event.target.closest('[data-proxy-click]');
+  if (proxy) {
+    document.querySelector(`#${proxy.dataset.proxyClick}`)?.click();
+  }
+
+  const helpTab = event.target.closest('[data-help-tab]');
+  if (helpTab) {
+    closeUtilityPanel();
+    setActiveTab(helpTab.dataset.helpTab);
+  }
+
+  const helpAction = event.target.closest('[data-help-action="lookup"]');
+  if (helpAction) {
+    closeUtilityPanel();
+    setActiveTab('posPanel');
+    lookupPrescriptionId.focus();
+  }
+});
 checkHealth();
 loadCurrentUser();

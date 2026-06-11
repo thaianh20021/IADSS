@@ -4,42 +4,45 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>IADSS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css">
   </head>
   <body class="auth-locked">
-    <header class="app-header">
-      <div class="brand-block">
-        <div class="brand-mark" aria-hidden="true">+</div>
-        <div>
-          <h1>IADSS</h1>
-          <p>Integrated Drug Dispensing Surveillance System</p>
+    <div class="auth-view" id="authView">
+      <header class="auth-topbar">
+        <div class="auth-logo">IADSS</div>
+        <div class="auth-icons" aria-hidden="true">
+          <span class="material-symbols-outlined">notifications</span>
+          <span class="material-symbols-outlined">settings</span>
+          <span class="material-symbols-outlined">help</span>
+          <span class="profile-dot material-symbols-outlined">person</span>
         </div>
-      </div>
-      <div class="header-actions">
-        <div class="system-status" id="systemStatus">Checking system</div>
-        <div class="user-menu" id="userMenu" hidden>
-          <span id="currentUserLabel"></span>
-          <button class="ghost-button" id="logoutButton" type="button">Log Out</button>
-        </div>
-      </div>
-    </header>
+      </header>
 
-    <nav class="tab-bar" aria-label="Primary views">
-      <button class="tab-button active" type="button" data-tab="rolePanel">Home</button>
-      <button class="tab-button" type="button" data-tab="posPanel">Pharmacy Portal</button>
-      <button class="tab-button" type="button" data-tab="doctorPanel">Hospital / Doctor Portal</button>
-      <button class="tab-button" type="button" data-tab="dashboardPanel">MOH Dashboard</button>
-      <button class="tab-button" type="button" data-tab="apiDocsPanel">POS API Docs</button>
-      <button class="tab-button" type="button" data-tab="settingsPanel">Settings</button>
-    </nav>
+      <main class="auth-layout">
+        <section class="auth-hero" aria-label="IADSS overview">
+          <div class="hero-content">
+            <div class="hero-mark material-symbols-outlined" aria-hidden="true">health_and_safety</div>
+            <h1>Integrated Drug Dispensing Surveillance System</h1>
+            <p>Ensure accurate, safe, and transparent dispensing workflows for clinical pharmacy operations.</p>
+            <ul class="hero-checks">
+              <li><span class="material-symbols-outlined">check_circle</span>Role-based access control</li>
+              <li><span class="material-symbols-outlined">check_circle</span>Real-time dispensing audit trail</li>
+              <li><span class="material-symbols-outlined">check_circle</span>Automated prescription risk alerts</li>
+            </ul>
+          </div>
+        </section>
 
-    <main class="app-shell">
-      <section class="auth-panel" id="authPanel">
-        <div class="auth-shell">
-          <div class="auth-intro">
-            <span class="panel-chip">Role-based access</span>
-            <h2>IADSS Secure Access</h2>
-            <p>Use your account ID to enter the correct portal for pharmacy dispensing, hospital prescriptions, or MOH surveillance.</p>
+        <section class="auth-panel" id="authPanel">
+                    <div class="auth-role-gate" aria-label="Choose access role">
+            <div class="auth-role-head"><span class="material-symbols-outlined">monitor_heart</span><strong>Choose Portal</strong><small id="authRoleHint">Select a role to personalize login and registration.</small></div>
+            <div class="auth-role-grid">
+              <button class="auth-role-card" type="button" data-auth-role="doctor"><span class="material-symbols-outlined">stethoscope</span><strong>Doctor / Hospital</strong><small>Create prescriptions and manage clinical records.</small></button>
+              <button class="auth-role-card" type="button" data-auth-role="pharmacy"><span class="material-symbols-outlined">local_pharmacy</span><strong>Pharmacy</strong><small>Scan, verify, dispense, and audit override when required.</small></button>
+              <button class="auth-role-card" type="button" data-auth-role="moh"><span class="material-symbols-outlined">analytics</span><strong>MOH</strong><small>Monitor trends, export reports, and manage reference data.</small></button>
+            </div>
           </div>
 
           <div class="auth-card">
@@ -49,474 +52,145 @@
             </div>
 
             <form class="auth-form active" id="loginForm">
-            <h3>Welcome back</h3>
-            <p class="auth-copy">Log in with your email or username. Pharmacy username is the Pharmacy ID; Doctor username is the Doctor ID.</p>
-            <label>
-              <span>Email or Username</span>
-              <input name="identifier" type="text" placeholder="email@example.com or account ID" autocomplete="username" required>
-            </label>
-            <label>
-              <span>Password</span>
-              <input name="password" type="password" placeholder="Password" autocomplete="current-password" required>
-            </label>
-            <button class="primary-button" type="submit">Log In</button>
-          </form>
+              <div class="auth-copy-block">
+                <h2>Welcome back</h2>
+                <p class="auth-copy">Log in with your email or username. Pharmacy username is the Pharmacy ID; Doctor username is the Doctor ID.</p>
+              </div>
+              <label><span>Email or Username</span><input name="identifier" type="text" placeholder="email@example.com or account ID" autocomplete="username" required></label>
+              <label><span>Password</span><input name="password" type="password" placeholder="Password" autocomplete="current-password" required></label>
+              <button class="primary-button auth-submit" type="submit"><span class="material-symbols-outlined">login</span>Log In</button>
+            </form>
 
             <form class="auth-form" id="registerForm" hidden>
-            <h3>Create Account</h3>
-            <p class="auth-copy">Create one account for the right organization role. The username becomes the role ID shown in the system.</p>
-            <label>
-              <span>Full Name</span>
-              <input name="name" type="text" placeholder="Your name" autocomplete="name" required>
-            </label>
-            <label>
-              <span>Username / Account ID</span>
-              <input name="username" type="text" placeholder="e.g. pharma-hcm-001 or doctor-nt-001" autocomplete="username" required>
-            </label>
-            <label>
-              <span>Email</span>
-              <input name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
-            </label>
-            <label>
-              <span>Password</span>
-              <input name="password" type="password" placeholder="At least 6 characters" autocomplete="new-password" required>
-            </label>
-            <label>
-              <span>Role</span>
-              <select name="role" required>
-                <option value="pharmacy">Pharmacy</option>
-                <option value="doctor">Doctor / Hospital</option>
-                <option value="moh">MOH</option>
-              </select>
-            </label>
-            <button class="primary-button" type="submit">Create Account</button>
-          </form>
+              <div class="auth-copy-block">
+                <h2>Create Account</h2>
+                <p class="auth-copy">Create one account for the right organization role. The username becomes the role ID shown in the system.</p>
+              </div>
+              <label><span>Full Name</span><input name="name" type="text" placeholder="Your name" autocomplete="name" required></label>
+              <label><span>Username / Account ID</span><input name="username" type="text" placeholder="e.g. pharma-hcm-001 or doctor-nt-001" autocomplete="username" required></label>
+              <label><span>Email</span><input name="email" type="email" placeholder="you@example.com" autocomplete="email" required></label>
+              <label><span>Password</span><input name="password" type="password" placeholder="At least 6 characters" autocomplete="new-password" required></label>
+              <label><span>Role</span><select name="role" required><option value="pharmacy">Pharmacy</option><option value="doctor">Doctor / Hospital</option><option value="moh">MOH</option></select></label>
+              <button class="primary-button auth-submit" type="submit"><span class="material-symbols-outlined">person_add</span>Create Account</button>
+            </form>
           </div>
-        </div>
-
-        <div class="alert-area" id="authAlertArea" role="status" aria-live="polite"></div>
-      </section>
-
-      <section class="tab-panel active" id="rolePanel">
-        <div class="panel-heading">
-          <h2>Select Portal</h2>
-          <span class="panel-chip">Role-based MVP demo</span>
-        </div>
-
-        <div class="role-grid">
-          <button class="role-card" type="button" data-tab="posPanel">
-            <span class="role-icon">Rx</span>
-            <strong>Pharmacy</strong>
-            <small>Load prescription, check remaining quantity, and mark drug as dispensed.</small>
-          </button>
-          <button class="role-card" type="button" data-tab="doctorPanel">
-            <span class="role-icon">Dr</span>
-            <strong>Doctor / Hospital</strong>
-            <small>Create diagnosis-safe prescription records for pharmacies to verify.</small>
-          </button>
-          <button class="role-card" type="button" data-tab="dashboardPanel">
-            <span class="role-icon">MOH</span>
-            <strong>Ministry of Health</strong>
-            <small>Monitor approved, blocked, repeated, and suspicious dispensing attempts.</small>
-          </button>
-        </div>
-      </section>
-
-      <section class="tab-panel" id="posPanel">
-        <div class="panel-heading">
-          <h2>Pharmacy Portal</h2>
-          <div class="panel-actions">
-            <span class="panel-chip">Real-time verification</span>
-            <button class="ghost-button" id="resetTransactionForm" type="button">Reset</button>
-          </div>
-        </div>
-
-        <section class="lookup-card">
-          <label>
-            <span>Scan QR / Enter Prescription ID</span>
-            <div class="inline-lookup">
-              <input id="lookupPrescriptionId" type="text" placeholder="RX-2026-0001" autocomplete="off">
-              <button class="ghost-button" id="scanQrButton" type="button">Scan QR</button>
-              <button class="primary-button" id="loadPrescriptionButton" type="button">Load Prescription</button>
-            </div>
-          </label>
-          <div class="qr-scanner" id="qrScanner" hidden>
-            <video id="qrScannerVideo" playsinline muted></video>
-            <div class="qr-scanner-actions">
-              <span id="qrScannerStatus">Point camera at the prescription QR code.</span>
-              <button class="ghost-button" id="stopQrScanButton" type="button">Stop Scan</button>
-            </div>
-          </div>
-          <div class="prescription-summary empty" id="loadedPrescriptionSummary">
-            No prescription loaded.
-          </div>
+          <div class="alert-area" id="authAlertArea" role="status" aria-live="polite"></div>
         </section>
+      </main>
+    </div>
 
-        <form class="transaction-form" id="transactionForm">
-          <label>
-            <span>Prescription ID / QR Code</span>
-            <input id="prescriptionId" name="prescriptionId" type="text" placeholder="RX-2026-0001" autocomplete="off" required>
-          </label>
+    <div class="app-layout">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="sidebar-brand">
+          <div class="brand-mark material-symbols-outlined" aria-hidden="true">local_hospital</div>
+          <div><strong>IADSS Portal</strong><span>Integrated Surveillance</span></div>
+        </div>
+        <button class="sidebar-cta tab-button" type="button" data-tab="doctorPanel"><span class="material-symbols-outlined">add</span>New Prescription</button>
+        <nav class="tab-bar" aria-label="Primary views">
+          <button class="tab-button active" type="button" data-tab="rolePanel"><span class="material-symbols-outlined">dashboard</span>Home</button>
+          <button class="tab-button" type="button" data-tab="posPanel"><span class="material-symbols-outlined">vaccines</span>Pharmacy Portal</button>
+          <button class="tab-button" type="button" data-tab="doctorPanel"><span class="material-symbols-outlined">description</span>Hospital / Doctor Portal</button>
+          <button class="tab-button" type="button" data-tab="dashboardPanel"><span class="material-symbols-outlined">monitoring</span>MOH Dashboard</button>
+          <button class="tab-button" type="button" data-tab="apiDocsPanel"><span class="material-symbols-outlined">api</span>POS API Docs</button>
+          <button class="tab-button" type="button" data-tab="settingsPanel"><span class="material-symbols-outlined">settings</span>Settings</button>
+        </nav>
+        <div class="sidebar-footer">
+          <button class="sidebar-support" id="supportButton" type="button"><span class="material-symbols-outlined">support_agent</span>Support</button>
+          <button class="sidebar-logout" id="logoutButton" type="button"><span class="material-symbols-outlined">logout</span>Log Out</button>
+        </div>
+      </aside>
 
-          <label>
-            <span>Patient ID</span>
-            <input id="patientId" name="patientId" type="text" placeholder="Auto-filled after lookup" autocomplete="off">
-          </label>
+      <div class="workspace">
+        <header class="app-header">
+          <div class="brand-block"><h1>IADSS</h1><p>Integrated Drug Dispensing Surveillance System</p></div>
+          <div class="header-actions">
+            <label class="global-search" aria-label="Search"><span class="material-symbols-outlined">search</span><input id="globalSearchInput" type="search" placeholder="Search..."></label>
+            <button class="header-icon" id="notificationsButton" type="button" aria-label="Notifications"><span class="material-symbols-outlined">notifications</span></button><button class="header-icon" id="settingsShortcutButton" type="button" aria-label="Settings"><span class="material-symbols-outlined">settings</span></button><button class="header-icon" id="helpButton" type="button" aria-label="Help"><span class="material-symbols-outlined">help</span></button><div class="system-status" id="systemStatus">Checking system</div>
+            <div class="user-menu" id="userMenu" hidden><span id="currentUserLabel"></span></div>
+          </div>
+        </header>
 
-          <label>
-            <span>Hospital / Clinic Visited</span>
-            <input id="hospitalName" name="hospitalName" type="text" placeholder="Auto-filled after lookup" autocomplete="off">
-          </label>
-
-          <label>
-            <span>Prescriber License Number</span>
-            <input id="prescriberLicense" name="prescriberLicense" type="text" placeholder="Auto-filled after lookup" autocomplete="off">
-          </label>
-
-          <label>
-            <span>Drug Name</span>
-            <div class="medicine-field">
-              <input id="drug" name="drug" type="text" list="medicineOptions" autocomplete="off" aria-controls="medicineSuggestions" aria-expanded="false" placeholder="Search or auto-filled drug">
-              <div class="medicine-suggestions" id="medicineSuggestions" role="listbox"></div>
-            </div>
-            <datalist id="medicineOptions"></datalist>
-          </label>
-
-          <label>
-            <span>Drug / Antibiotic Class</span>
-            <select id="drugClass" name="drugClass">
-              <option value="">Select class</option>
-            </select>
-          </label>
-
-          <label>
-            <span>Dosage</span>
-            <input id="dosage" name="dosage" type="text" placeholder="e.g. 500mg" autocomplete="off">
-          </label>
-
-          <label>
-            <span>Prescription Quantity Limit</span>
-            <input id="quantityLimitDisplay" type="number" min="1" step="1" placeholder="Auto-filled" readonly>
-          </label>
-
-          <label>
-            <span>Remaining Quantity</span>
-            <input id="remainingQuantityDisplay" type="number" min="0" step="1" placeholder="Auto-filled" readonly>
-          </label>
-
-          <label>
-            <span>Dispense Quantity</span>
-            <input id="quantity" name="quantity" type="number" min="1" step="1" placeholder="Quantity sold now" required>
-          </label>
-
-          <label>
-            <span>Treatment Duration (days)</span>
-            <input id="treatmentDurationDays" name="treatmentDurationDays" type="number" min="1" step="1" placeholder="Auto-filled after lookup">
-          </label>
-
-          <section class="override-card wide-field">
-            <label class="checkbox-line">
-              <input id="overrideBlocked" name="overrideBlocked" type="checkbox">
-              <span>Audited override if this transaction is blocked</span>
-            </label>
-            <div class="override-fields">
-              <label>
-                <span>Pharmacist License</span>
-                <input id="pharmacistLicense" name="pharmacistLicense" type="text" placeholder="Personal pharmacist license">
-              </label>
-              <label>
-                <span>Override Reason</span>
-                <textarea id="overrideReason" name="overrideReason" placeholder="Example: dose change confirmed with prescriber by phone"></textarea>
-              </label>
+        <main class="app-shell">
+          <section class="tab-panel active" id="rolePanel">
+            <div class="panel-heading"><div><h2>Select Portal</h2><p>Choose the workflow available to your account role.</p></div><span class="panel-chip">Role-based MVP demo</span></div>
+            <div class="role-grid">
+              <button class="role-card" type="button" data-tab="posPanel"><span class="role-icon material-symbols-outlined">vaccines</span><strong>Pharmacy</strong><small>Load prescription, check remaining quantity, and mark drug as dispensed.</small></button>
+              <button class="role-card" type="button" data-tab="doctorPanel"><span class="role-icon material-symbols-outlined">stethoscope</span><strong>Doctor / Hospital</strong><small>Create diagnosis-safe prescription records for pharmacies to verify.</small></button>
+              <button class="role-card" type="button" data-tab="dashboardPanel"><span class="role-icon material-symbols-outlined">admin_panel_settings</span><strong>Ministry of Health</strong><small>Monitor approved, blocked, repeated, and suspicious dispensing attempts.</small></button>
             </div>
           </section>
 
-          <div class="form-actions">
-            <button class="primary-button" type="submit">Mark as Dispensed</button>
-            <span class="lookup-source" id="lookupSource"></span>
-          </div>
-        </form>
+          <section class="tab-panel pharmacy-panel" id="posPanel">
+            <div class="panel-heading"><div><h2>Pharmacy Portal</h2><p>Process and verify electronic prescriptions.</p></div><div class="panel-actions"><span class="panel-chip">Real-time verification</span><button class="ghost-button" id="resetTransactionForm" type="button">Reset</button></div></div>
+            <div class="alert-area top-alert" id="alertArea" role="status" aria-live="polite"></div>
+            <div class="pharmacy-grid">
+              <div class="pharmacy-rail">
+                <section class="lookup-card">
+                  <div class="card-title"><span class="material-symbols-outlined">search_check</span><h3>Prescription Lookup</h3></div>
+                  <div class="scan-zone"><div class="scan-frame"><span class="material-symbols-outlined">qr_code_scanner</span></div><button class="primary-button scan-hero-button" type="button" data-proxy-click="scanQrButton"><span class="material-symbols-outlined">photo_camera</span>Scan Prescription QR</button></div><label><span>Manual Prescription ID</span><div class="inline-lookup"><input id="lookupPrescriptionId" type="text" placeholder="RX-2026-0001" autocomplete="off"><button class="ghost-button icon-action" id="scanQrButton" type="button" aria-label="Scan QR"><span class="material-symbols-outlined">qr_code_scanner</span></button><button class="primary-button" id="loadPrescriptionButton" type="button">Load</button></div></label>
+                  <div class="qr-scanner" id="qrScanner" hidden><video id="qrScannerVideo" playsinline muted></video><div class="qr-scanner-actions"><span id="qrScannerStatus">Point camera at the prescription QR code.</span><button class="ghost-button" id="stopQrScanButton" type="button">Stop Scan</button></div></div>
+                </section>
+                <section class="prescription-summary empty" id="loadedPrescriptionSummary">No prescription loaded.</section>
+              </div>
 
-        <div class="alert-area" id="alertArea" role="status" aria-live="polite"></div>
-      </section>
-
-      <section class="tab-panel" id="doctorPanel">
-        <div class="panel-heading">
-          <h2>Hospital / Doctor Portal</h2>
-          <div class="panel-actions">
-            <span class="panel-chip">Prescription registry</span>
-            <button class="ghost-button" id="resetPrescriptionForm" type="button">Reset</button>
-          </div>
-        </div>
-
-        <form class="transaction-form" id="prescriptionForm">
-          <label>
-            <span>Prescription ID / QR Code</span>
-            <input name="prescriptionId" type="text" placeholder="RX-2026-0001" autocomplete="off" required>
-          </label>
-
-          <label>
-            <span>Patient ID</span>
-            <input name="patientId" type="text" placeholder="Patient ID or national ID" autocomplete="off" required>
-          </label>
-
-          <label>
-            <span>Hospital / Clinic</span>
-            <input name="hospitalName" type="text" placeholder="Hospital or clinic name" autocomplete="off" required>
-          </label>
-
-          <label>
-            <span>Prescriber License Number</span>
-            <input name="prescriberLicense" type="text" placeholder="Prescriber license number" autocomplete="off" required>
-          </label>
-
-          <label>
-            <span>Main Diagnosis</span>
-            <input name="mainDiagnosis" type="text" placeholder="Basic diagnosis summary" autocomplete="off">
-          </label>
-
-          <label>
-            <span>ICD-10 Code</span>
-            <input name="icd10Code" type="text" placeholder="Optional, e.g. J02.9" autocomplete="off">
-          </label>
-
-          <label class="wide-field">
-            <span>Clinical Notes</span>
-            <textarea name="clinicalNotes" placeholder="Internal doctor notes. Not shown to pharmacy."></textarea>
-          </label>
-
-          <label class="wide-field">
-            <span>Drug Allergies</span>
-            <textarea name="drugAllergies" placeholder="Known allergies. Not shown to pharmacy."></textarea>
-          </label>
-
-          <label>
-            <span>Drug Name</span>
-            <input name="drugName" type="text" placeholder="Drug name" autocomplete="off" required>
-          </label>
-
-          <label>
-            <span>Drug / Antibiotic Class</span>
-            <select name="drugClass" required>
-              <option value="">Select class</option>
-            </select>
-          </label>
-
-          <label>
-            <span>Dosage</span>
-            <input name="dosage" type="text" placeholder="e.g. 500mg" autocomplete="off" required>
-          </label>
-
-          <label>
-            <span>Quantity Limit</span>
-            <input name="quantityLimit" type="number" min="1" step="1" placeholder="Maximum quantity" required>
-          </label>
-
-          <label>
-            <span>Treatment Duration (days)</span>
-            <input name="treatmentDurationDays" type="number" min="1" step="1" placeholder="Number of days" required>
-          </label>
-
-          <label>
-            <span>Expiry Date</span>
-            <input name="expiryDate" type="date" required>
-          </label>
-
-          <div class="form-actions">
-            <button class="primary-button" type="submit">Save Prescription</button>
-            <button class="ghost-button" id="printPrescriptionButton" type="button">Print Prescription</button>
-            <button class="ghost-button" id="sendPrescriptionButton" type="button">Send to Pharmacy</button>
-          </div>
-        </form>
-
-        <div class="print-prescription" id="printPrescription">
-          <div class="print-header">
-            <strong>IADSS Prescription</strong>
-            <span id="printPrescriptionId">No prescription selected</span>
-          </div>
-          <img class="qr-image" id="qrImage" alt="Prescription QR code">
-          <div id="printPrescriptionDetails"></div>
-        </div>
-
-        <div class="alert-area" id="prescriptionAlertArea" role="status" aria-live="polite"></div>
-
-        <div class="subsection-heading">
-          <h3>Prescription Registry</h3>
-        </div>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Prescription ID</th>
-                <th>Doctor ID</th>
-                <th>Patient ID</th>
-                <th>Hospital / Clinic</th>
-                <th>Prescriber</th>
-                <th>Drug</th>
-                <th>Status</th>
-                <th>Class</th>
-                <th>Dosage</th>
-                <th>Dispensed</th>
-                <th>Remaining</th>
-                <th>Expiry</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="prescriptionRows">
-              <tr>
-                <td colspan="13" class="empty-cell">Loading prescriptions...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-      </section>
-
-      <section class="tab-panel" id="dashboardPanel">
-        <div class="panel-heading">
-          <h2>MOH Dashboard</h2>
-          <div class="panel-actions">
-            <button class="secondary-button" id="clearDataButton" type="button">Clear Data</button>
-          </div>
-        </div>
-
-        <div class="metrics-grid" aria-label="MOH surveillance summary">
-          <div class="metric"><span>Total Attempts</span><strong id="totalMetric">0</strong></div>
-          <div class="metric"><span>Approved</span><strong id="approvedMetric">0</strong></div>
-          <div class="metric danger-metric"><span>Blocked</span><strong id="blockedMetric">0</strong></div>
-          <div class="metric warning-metric"><span>Audited Overrides</span><strong id="overrideMetric">0</strong></div>
-          <div class="metric danger-metric"><span>Intervention Rate</span><strong id="interventionRateMetric">0%</strong></div>
-          <div class="metric danger-metric"><span>Invalid Attempt Rate</span><strong id="invalidAttemptRateMetric">0%</strong></div>
-        </div>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Pharmacy ID</th>
-                <th>Prescription ID</th>
-                <th>Patient ID</th>
-                <th>Hospital / Clinic</th>
-                <th>Drug</th>
-                <th>Dispensed Qty</th>
-                <th>Duration</th>
-                <th>Rx Status</th>
-                <th>Status</th>
-                <th>Reason</th>
-                <th>Pharmacist</th>
-                <th>Override Reason</th>
-              </tr>
-            </thead>
-            <tbody id="transactionRows">
-              <tr>
-                <td colspan="13" class="empty-cell">No transactions recorded.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <section class="danger-zone">
-          <div>
-            <h3>User Management</h3>
-            <p>Delete all registered app users and active sessions. Prescriptions and transaction audit logs are kept.</p>
-          </div>
-          <button class="danger-button" id="clearUsersButton" type="button">Clear All Users</button>
-        </section>
-
-        <div class="alert-area" id="dashboardAlertArea" role="status" aria-live="polite"></div>
-      </section>
-
-      <section class="tab-panel" id="apiDocsPanel">
-        <div class="panel-heading">
-          <h2>POS API Integration Docs</h2>
-          <span class="panel-chip">Open API</span>
-        </div>
-
-        <div class="docs-grid">
-          <section class="doc-block">
-            <h3>Real-time POS Checkpoint</h3>
-            <p>External pharmacy POS systems can load a prescription, submit a dispense quantity before checkout, and receive an Approved or Blocked decision.</p>
+              <form class="transaction-form dispensing-form" id="transactionForm">
+                <div class="form-section-title"><span class="material-symbols-outlined">medication</span><h3>Dispensing Details</h3></div>
+                <label><span>Prescription ID / QR Code</span><input id="prescriptionId" name="prescriptionId" type="text" placeholder="RX-2026-0001" autocomplete="off" required></label>
+                <label><span>Patient ID</span><input id="patientId" name="patientId" type="text" placeholder="Auto-filled after lookup" autocomplete="off"></label>
+                <label><span>Hospital / Clinic Visited</span><input id="hospitalName" name="hospitalName" type="text" placeholder="Auto-filled after lookup" autocomplete="off"></label>
+                <label><span>Prescriber License Number</span><input id="prescriberLicense" name="prescriberLicense" type="text" placeholder="Auto-filled after lookup" autocomplete="off"></label>
+                <label><span>Drug Name</span><div class="medicine-field"><input id="drug" name="drug" type="text" list="medicineOptions" autocomplete="off" aria-controls="medicineSuggestions" aria-expanded="false" placeholder="Search or auto-filled drug"><div class="medicine-suggestions" id="medicineSuggestions" role="listbox"></div></div><datalist id="medicineOptions"></datalist></label>
+                <label><span>Drug / Antibiotic Class</span><select id="drugClass" name="drugClass"><option value="">Select class</option></select></label>
+                <label><span>Dosage</span><input id="dosage" name="dosage" type="text" placeholder="e.g. 500mg" autocomplete="off"></label>
+                <label><span>Prescription Quantity Limit</span><input id="quantityLimitDisplay" type="number" min="1" step="1" placeholder="Auto-filled" readonly></label>
+                <label><span>Remaining Quantity</span><input id="remainingQuantityDisplay" type="number" min="0" step="1" placeholder="Auto-filled" readonly></label>
+                <label><span>Dispense Quantity</span><input id="quantity" name="quantity" type="number" min="1" step="1" placeholder="Quantity sold now" required></label>
+                <label><span>Treatment Duration (days)</span><input id="treatmentDurationDays" name="treatmentDurationDays" type="number" min="1" step="1" placeholder="Auto-filled after lookup"></label>
+                <section class="override-card wide-field"><div class="override-title"><span class="material-symbols-outlined">warning</span><strong>Audited Override</strong></div><label class="checkbox-line"><input id="overrideBlocked" name="overrideBlocked" type="checkbox"><span>Audited override if this transaction is blocked</span></label><div class="override-fields"><label><span>Pharmacist License</span><input id="pharmacistLicense" name="pharmacistLicense" type="text" placeholder="Personal pharmacist license"></label><label><span>Override Reason</span><textarea id="overrideReason" name="overrideReason" placeholder="Example: dose change confirmed with prescriber by phone"></textarea></label></div><button class="warning-button" id="overrideDispenseButton" type="button"><span class="material-symbols-outlined">verified_user</span>Override & Dispense</button></section>
+                <div class="form-actions"><span class="lookup-source" id="lookupSource"></span><button class="primary-button dispense-button" type="submit"><span class="material-symbols-outlined">check_circle</span>Mark as Dispensed</button></div>
+              </form>
+            </div>
           </section>
 
-          <section class="doc-block">
-            <h3>Authentication</h3>
-            <code>Authorization: Bearer &lt;session-token&gt;</code>
+          <section class="tab-panel" id="doctorPanel">
+            <div class="panel-heading"><div><h2>Hospital / Doctor Portal</h2><p>Create prescription records for pharmacy verification.</p></div><div class="panel-actions"><span class="panel-chip">Prescription registry</span><button class="ghost-button" id="resetPrescriptionForm" type="button">Reset</button></div></div>
+            <form class="transaction-form" id="prescriptionForm">
+              <label><span>Prescription ID / QR Code</span><input name="prescriptionId" type="text" placeholder="RX-2026-0001" autocomplete="off" required></label><label><span>Patient ID</span><input name="patientId" type="text" placeholder="Patient ID or national ID" autocomplete="off" required></label><label><span>Hospital / Clinic</span><input name="hospitalName" type="text" placeholder="Hospital or clinic name" autocomplete="off" required></label><label><span>Prescriber License Number</span><input name="prescriberLicense" type="text" placeholder="Prescriber license number" autocomplete="off" required></label><label><span>Main Diagnosis</span><input name="mainDiagnosis" type="text" placeholder="Basic diagnosis summary" autocomplete="off"></label><label><span>ICD-10 Code</span><input name="icd10Code" type="text" placeholder="Optional, e.g. J02.9" autocomplete="off"></label><label class="wide-field"><span>Clinical Notes</span><textarea name="clinicalNotes" placeholder="Internal doctor notes. Not shown to pharmacy."></textarea></label><label class="wide-field"><span>Drug Allergies</span><textarea name="drugAllergies" placeholder="Known allergies. Not shown to pharmacy."></textarea></label><label><span>Drug Name</span><input name="drugName" type="text" placeholder="Drug name" autocomplete="off" required></label><label><span>Drug / Antibiotic Class</span><select name="drugClass" required><option value="">Select class</option></select></label><label><span>Dosage</span><input name="dosage" type="text" placeholder="e.g. 500mg" autocomplete="off" required></label><label><span>Quantity Limit</span><input name="quantityLimit" type="number" min="1" step="1" placeholder="Maximum quantity" required></label><label><span>Treatment Duration (days)</span><input name="treatmentDurationDays" type="number" min="1" step="1" placeholder="Number of days" required></label><label><span>Expiry Date</span><input name="expiryDate" type="date" required></label><div class="form-actions"><button class="primary-button" type="submit">Save Prescription</button><button class="ghost-button" id="printPrescriptionButton" type="button">Print Prescription</button><button class="ghost-button" id="sendPrescriptionButton" type="button">Send to Pharmacy</button></div>
+            </form>
+            <div class="print-prescription" id="printPrescription"><div class="print-header"><strong>IADSS Prescription</strong><span id="printPrescriptionId">No prescription selected</span></div><img class="qr-image" id="qrImage" alt="Prescription QR code"><div id="printPrescriptionDetails"></div></div><div class="alert-area" id="prescriptionAlertArea" role="status" aria-live="polite"></div><div class="subsection-heading"><h3>Prescription Registry</h3></div><div class="table-wrap"><table><thead><tr><th>Prescription ID</th><th>Doctor ID</th><th>Patient ID</th><th>Hospital / Clinic</th><th>Prescriber</th><th>Drug</th><th>Status</th><th>Class</th><th>Dosage</th><th>Dispensed</th><th>Remaining</th><th>Expiry</th><th>Action</th></tr></thead><tbody id="prescriptionRows"><tr><td colspan="13" class="empty-cell">Loading prescriptions...</td></tr></tbody></table></div>
           </section>
 
-          <section class="doc-block">
-            <h3>Lookup Endpoint</h3>
-            <code>GET /api/prescriptions/:prescriptionId</code>
+          <section class="tab-panel" id="dashboardPanel">
+            <div class="panel-heading"><div><h2>MOH Dashboard</h2><p>Real-time surveillance data for the dispensing network.</p></div><div class="panel-actions dashboard-controls"><select id="dashboardRoleFilter" aria-label="Filter by role"><option value="all">All roles</option><option value="pharmacy">Pharmacy</option><option value="doctor">Doctor</option><option value="moh">MOH</option></select><select id="dashboardDateFilter" aria-label="Filter by date"><option value="all">All time</option><option value="today">Today</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select><button class="primary-button" id="exportReportButton" type="button"><span class="material-symbols-outlined">download</span>Export Report</button><button class="secondary-button" id="clearDataButton" type="button"><span class="material-symbols-outlined">delete_sweep</span>Clear Data</button></div></div>
+            <div class="metrics-grid" aria-label="MOH surveillance summary"><div class="metric"><span>Total Attempts</span><strong id="totalMetric">0</strong></div><div class="metric success-metric"><span>Approved</span><strong id="approvedMetric">0</strong></div><div class="metric danger-metric"><span>Blocked</span><strong id="blockedMetric">0</strong></div><div class="metric warning-metric"><span>Audited Overrides</span><strong id="overrideMetric">0</strong></div><div class="metric danger-metric"><span>Intervention Rate</span><strong id="interventionRateMetric">0%</strong></div><div class="metric danger-metric"><span>Invalid Attempt Rate</span><strong id="invalidAttemptRateMetric">0%</strong></div></div>
+            <div class="table-card"><div class="table-title"><h3>Recent Transaction Log</h3><button class="icon-only-button" id="dashboardFilterButton" type="button" aria-label="Focus filters"><span class="material-symbols-outlined">filter_list</span></button></div><div class="table-wrap"><table><thead><tr><th>Timestamp</th><th>Pharmacy ID</th><th>Prescription ID</th><th>Patient ID</th><th>Hospital / Clinic</th><th>Drug</th><th>Dispensed Qty</th><th>Duration</th><th>Rx Status</th><th>Status</th><th>Reason</th><th>Pharmacist</th><th>Override Reason</th></tr></thead><tbody id="transactionRows"><tr><td colspan="13" class="empty-cell">No transactions recorded.</td></tr></tbody></table></div></div><section class="danger-zone"><div><h3>User Management</h3><p>Delete all registered app users and active sessions. Prescriptions and transaction audit logs are kept.</p></div><button class="danger-button" id="clearUsersButton" type="button">Clear All Users</button></section><div class="alert-area" id="dashboardAlertArea" role="status" aria-live="polite"></div>
           </section>
 
-          <section class="doc-block">
-            <h3>Dispense Endpoint</h3>
-            <code>POST /api/transactions</code>
-          </section>
-
-          <section class="doc-block wide">
-            <h3>Example Request</h3>
-<pre><code>POST /api/transactions
+          <section class="tab-panel" id="apiDocsPanel"><div class="panel-heading"><div><h2>POS API Integration Docs</h2><p>Endpoints for external pharmacy POS integrations.</p></div><span class="panel-chip">Open API</span></div><div class="docs-grid"><section class="doc-block"><h3>Real-time POS Checkpoint</h3><p>External pharmacy POS systems can load a prescription, submit a dispense quantity before checkout, and receive an Approved or Blocked decision.</p></section><section class="doc-block"><h3>Authentication</h3><code>Authorization: Bearer &lt;session-token&gt;</code></section><section class="doc-block"><h3>Lookup Endpoint</h3><code>GET /api/prescriptions/:prescriptionId</code></section><section class="doc-block"><h3>Dispense Endpoint</h3><code>POST /api/transactions</code></section><section class="doc-block wide"><h3>Example Request</h3><pre><code>POST /api/transactions
 Authorization: Bearer &lt;pharmacy-token&gt;
 
 {
   "prescriptionId": "RX-2026-0001",
   "quantity": 5
-}</code></pre>
-          </section>
+}</code></pre></section><section class="doc-block wide"><h3>Decision Logic</h3><ul><li>Prescription ID must exist in the national prescription registry.</li><li>Status must not be Expired, Cancelled, or Fully Dispensed.</li><li>Dispense quantity must be less than or equal to the remaining quantity.</li><li>Partial dispensing is allowed and the remaining quantity is updated.</li><li>Blocked transactions can only be overridden when a pharmacist enters a personal license and reason.</li><li>Every Approved and Blocked attempt is logged for MOH surveillance.</li></ul></section></div></section>
 
-          <section class="doc-block wide">
-            <h3>Decision Logic</h3>
-            <ul>
-              <li>Prescription ID must exist in the national prescription registry.</li>
-              <li>Status must not be Expired, Cancelled, or Fully Dispensed.</li>
-              <li>Dispense quantity must be less than or equal to the remaining quantity.</li>
-              <li>Partial dispensing is allowed and the remaining quantity is updated.</li>
-              <li>Blocked transactions can only be overridden when a pharmacist enters a personal license and reason.</li>
-              <li>Every Approved and Blocked attempt is logged for MOH surveillance.</li>
-            </ul>
-          </section>
-        </div>
-      </section>
+          <section class="tab-panel" id="settingsPanel"><div class="panel-heading"><div><h2>Settings</h2><p>Maintain reference drug and class lists.</p></div><span class="panel-chip">Reference lists</span></div><div class="settings-grid"><section class="settings-block"><div class="subsection-heading compact"><h3>Drug List</h3></div><form class="settings-form" id="drugListForm"><input name="value" type="text" placeholder="Add drug name" autocomplete="off" required><button class="primary-button" type="submit">Add</button></form><form class="bulk-form" id="drugBulkForm"><textarea name="values" placeholder="Bulk import: paste one drug per line, or separate with commas"></textarea><button class="ghost-button" type="submit">Import Drugs</button></form><div class="settings-list" id="drugList"></div></section><section class="settings-block"><div class="subsection-heading compact"><h3>Drug / Antibiotic Classes</h3></div><form class="settings-form" id="drugClassListForm"><input name="value" type="text" placeholder="Add drug class" autocomplete="off" required><button class="primary-button" type="submit">Add</button></form><form class="bulk-form" id="drugClassBulkForm"><textarea name="values" placeholder="Bulk import: paste one class per line, or separate with commas"></textarea><button class="ghost-button" type="submit">Import Classes</button></form><div class="settings-list" id="drugClassList"></div></section></div><div class="alert-area" id="settingsAlertArea" role="status" aria-live="polite"></div></section>
+                </main>
+      </div>
+      <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+        <button class="tab-button" type="button" data-tab="rolePanel"><span class="material-symbols-outlined">home</span><span>Home</span></button>
+        <button class="tab-button" type="button" data-tab="dashboardPanel"><span class="material-symbols-outlined">history</span><span>History</span></button>
+        <button class="tab-button" type="button" data-tab="posPanel"><span class="material-symbols-outlined">emergency</span><span>Alerts</span></button>
+        <button class="tab-button" type="button" data-tab="settingsPanel"><span class="material-symbols-outlined">settings</span><span>Settings</span></button>
+      </nav>
+    </div>
 
-      <section class="tab-panel" id="settingsPanel">
-        <div class="panel-heading">
-          <h2>Settings</h2>
-          <span class="panel-chip">Reference lists</span>
-        </div>
-
-        <div class="settings-grid">
-          <section class="settings-block">
-            <div class="subsection-heading compact"><h3>Drug List</h3></div>
-            <form class="settings-form" id="drugListForm">
-              <input name="value" type="text" placeholder="Add drug name" autocomplete="off" required>
-              <button class="primary-button" type="submit">Add</button>
-            </form>
-            <form class="bulk-form" id="drugBulkForm">
-              <textarea name="values" placeholder="Bulk import: paste one drug per line, or separate with commas"></textarea>
-              <button class="ghost-button" type="submit">Import Drugs</button>
-            </form>
-            <div class="settings-list" id="drugList"></div>
-          </section>
-
-          <section class="settings-block">
-            <div class="subsection-heading compact"><h3>Drug / Antibiotic Classes</h3></div>
-            <form class="settings-form" id="drugClassListForm">
-              <input name="value" type="text" placeholder="Add drug class" autocomplete="off" required>
-              <button class="primary-button" type="submit">Add</button>
-            </form>
-            <form class="bulk-form" id="drugClassBulkForm">
-              <textarea name="values" placeholder="Bulk import: paste one class per line, or separate with commas"></textarea>
-              <button class="ghost-button" type="submit">Import Classes</button>
-            </form>
-            <div class="settings-list" id="drugClassList"></div>
-          </section>
-        </div>
-
-        <div class="alert-area" id="settingsAlertArea" role="status" aria-live="polite"></div>
-      </section>
-    </main>
+    <div class="utility-panel" id="utilityPanel" hidden>
+      <div class="utility-dialog" role="dialog" aria-modal="true" aria-labelledby="utilityTitle">
+        <div class="utility-heading"><h2 id="utilityTitle">IADSS</h2><button class="icon-only-button" id="utilityCloseButton" type="button" aria-label="Close"><span class="material-symbols-outlined">close</span></button></div>
+        <div class="utility-body" id="utilityBody"></div>
+      </div>
+    </div>
 
     <script src="/vendor/jsqr/jsQR.js"></script>
     <script src="/script.js"></script>
