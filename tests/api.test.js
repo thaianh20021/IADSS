@@ -165,7 +165,7 @@ describe('IADSS API', () => {
 
     const prescriptions = await request(app).get('/api/prescriptions').set(authHeader('doctor')).expect(200);
     const dispensed = prescriptions.body.prescriptions.find((item) => item.prescriptionId === prescription.prescriptionId);
-    assert.equal(dispensed.doctorId, `DOC-${users.doctor.username}`);
+    assert.equal(dispensed.doctorId, users.doctor.username);
     assert.equal(dispensed.hospitalId, `HOSP-${users.doctor.username}`);
     assert.equal(dispensed.prescriptionStatus, 'Partially Dispensed');
     assert.equal(dispensed.dispensedQuantity, 10);
@@ -250,7 +250,7 @@ describe('IADSS API', () => {
       })
       .expect(201);
 
-    assert.equal(created.body.prescription.doctorId, `DOC-${users.doctor.username}`);
+    assert.equal(created.body.prescription.doctorId, users.doctor.username);
     assert.equal(created.body.prescription.hospitalId, 'HOSP-MULTI-001');
     assert.equal(created.body.prescription.items.length, 2);
 

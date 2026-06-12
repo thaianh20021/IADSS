@@ -90,7 +90,7 @@ async function main() {
     })
   });
   assert(doctorPrescription.prescription.patientId === '88888', 'Doctor prescription was not saved.');
-  assert(doctorPrescription.prescription.doctorId === `DOC-smoke-doctor-${runId}`, 'Doctor ID was not synced from the account.');
+  assert(doctorPrescription.prescription.doctorId === `smoke-doctor-${runId}`, 'Doctor ID was not synced from the account.');
   console.log('OK doctor prescription saved');
 
   const lookup = await request(`/api/prescriptions/${cefiximePrescriptionId}`, { token: auth.pharmacy });

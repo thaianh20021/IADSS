@@ -1023,7 +1023,6 @@ function getPrescriptionFormPayload() {
   return {
     prescriptionId: formData.get('prescriptionId'),
     patientId: formData.get('patientId'),
-    doctorId: formData.get('doctorId'),
     hospitalId: formData.get('hospitalId'),
     hospitalName: formData.get('hospitalName'),
     prescriberLicense: formData.get('prescriberLicense'),
@@ -1165,7 +1164,6 @@ registerForm.addEventListener('submit', async (event) => {
     await submitAuthForm('/api/auth/register', {
       name: formData.get('name'),
       username: formData.get('username'),
-      doctorId: formData.get('doctorId'),
       hospitalId: formData.get('hospitalId'),
       pharmacyId: formData.get('pharmacyId'),
       mohId: formData.get('mohId'),

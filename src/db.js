@@ -795,10 +795,17 @@ class PostgresDatabase {
     await this.pool.query(`
       UPDATE users
       SET
-        doctor_id = CASE WHEN role = 'doctor' AND (doctor_id IS NULL OR doctor_id = '') THEN 'DOC-' || username ELSE doctor_id END,
+        doctor_id = CASE WHEN role = 'doctor' THEN username ELSE doctor_id END,
         hospital_id = CASE WHEN role = 'doctor' AND (hospital_id IS NULL OR hospital_id = '') THEN 'HOSP-' || username ELSE hospital_id END,
         pharmacy_id = CASE WHEN role = 'pharmacy' AND (pharmacy_id IS NULL OR pharmacy_id = '') THEN 'PHARM-' || username ELSE pharmacy_id END,
         moh_id = CASE WHEN role = 'moh' AND (moh_id IS NULL OR moh_id = '') THEN 'MOH-' || username ELSE moh_id END;
+    `);
+    await this.pool.query(`
+      UPDATE valid_prescriptions p
+      SET doctor_id = u.username
+      FROM users u
+      WHERE u.role = 'doctor'
+        AND p.doctor_id = 'DOC-' || u.username;
     `);
     await this.pool.query('ALTER TABLE users ALTER COLUMN username SET NOT NULL;');
     await this.pool.query('CREATE UNIQUE INDEX IF NOT EXISTS users_username_key ON users (username);');
@@ -1641,8 +1648,8 @@ class JsonFileDatabase {
       }
 
       if (user.role === 'doctor') {
-        if (!user.doctorId) {
-          user.doctorId = `DOC-${user.username}`;
+        if (user.doctorId !== user.username) {
+          user.doctorId = user.username;
           changed = true;
         }
 
@@ -1659,6 +1666,17 @@ class JsonFileDatabase {
 
       if (user.role === 'moh' && !user.mohId) {
         user.mohId = `MOH-${user.username}`;
+        changed = true;
+      }
+    });
+
+    this.state.validPrescriptions.forEach((prescription) => {
+      const doctor = this.state.users.find((user) => {
+        return user.role === 'doctor' && prescription.doctorId === `DOC-${user.username}`;
+      });
+
+      if (doctor) {
+        prescription.doctorId = doctor.username;
         changed = true;
       }
     });

@@ -61,7 +61,6 @@ function sanitizeUser(user) {
   }
 
   const accountId = user.username;
-  const defaultDoctorId = `DOC-${accountId}`;
   const defaultHospitalId = `HOSP-${accountId}`;
   const defaultPharmacyId = `PHARM-${accountId}`;
   const defaultMohId = `MOH-${accountId}`;
@@ -80,7 +79,7 @@ function sanitizeUser(user) {
   }
 
   if (user.role === 'doctor') {
-    sanitized.doctorId = user.doctorId || defaultDoctorId;
+    sanitized.doctorId = accountId;
     sanitized.hospitalId = user.hospitalId || defaultHospitalId;
   }
 
@@ -93,13 +92,12 @@ function sanitizeUser(user) {
 
 function getRoleIds(userInput) {
   const username = userInput.username;
-  const doctorId = normalizeInput(userInput.doctorId) || `DOC-${username}`;
   const hospitalId = normalizeInput(userInput.hospitalId) || `HOSP-${username}`;
   const pharmacyId = normalizeInput(userInput.pharmacyId) || `PHARM-${username}`;
   const mohId = normalizeInput(userInput.mohId) || `MOH-${username}`;
 
   return {
-    doctorId: userInput.role === 'doctor' ? doctorId : null,
+    doctorId: userInput.role === 'doctor' ? username : null,
     hospitalId: userInput.role === 'doctor' ? hospitalId : null,
     pharmacyId: userInput.role === 'pharmacy' ? pharmacyId : null,
     mohId: userInput.role === 'moh' ? mohId : null
