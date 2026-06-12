@@ -411,44 +411,175 @@ function getTodayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function getPrescriptionStatus(prescription) {
+function toWholeNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : fallback;
+}
+
+function normalizeItemId(value, index) {
+  return normalizeText(value) || `ITEM-${index + 1}`;
+}
+
+function normalizePrescriptionItem(item, index, prescription = {}) {
+  const source = item ?? {};
+  const drugName = normalizeText(source.drugName ?? source.antibioticName ?? source.drug ?? source.antibiotic ?? prescription.antibioticName ?? prescription.drugName);
+  const drugClass = normalizeText(source.drugClass ?? source.antibioticClass ?? prescription.antibioticClass ?? prescription.drugClass);
+  const quantityLimit = toWholeNumber(source.quantityLimit ?? source.quantity ?? prescription.quantityLimit);
+  const dispensedQuantity = Math.min(toWholeNumber(source.dispensedQuantity ?? source.dispensed ?? 0), quantityLimit || Number.MAX_SAFE_INTEGER);
+  const treatmentDurationDays = toWholeNumber(source.treatmentDurationDays ?? prescription.treatmentDurationDays, 1) || 1;
+  const expiryDate = normalizeText(source.expiryDate ?? prescription.expiryDate);
+
+  return {
+    itemId: normalizeItemId(source.itemId ?? source.id, index),
+    drugName,
+    antibioticName: drugName,
+    drugClass,
+    antibioticClass: drugClass,
+    dosage: normalizeText(source.dosage ?? prescription.dosage),
+    quantityLimit,
+    dispensedQuantity,
+    remainingQuantity: Math.max(quantityLimit - dispensedQuantity, 0),
+    treatmentDurationDays,
+    expiryDate
+  };
+}
+
+function normalizePrescriptionItems(prescription = {}) {
+  const rawItems = Array.isArray(prescription.items) ? prescription.items : [];
+  const sourceItems = rawItems.length > 0 ? rawItems : [prescription];
+  const items = sourceItems
+    .map((item, index) => normalizePrescriptionItem(item, index, prescription))
+    .filter((item) => item.drugName || item.drugClass || item.dosage || item.quantityLimit > 0);
+
+  return items.length > 0 ? items : [normalizePrescriptionItem({}, 0, prescription)];
+}
+
+function getPrescriptionItemStatus(prescription, item) {
   if (prescription.cancelledAt) {
     return PRESCRIPTION_STATUS.CANCELLED;
   }
 
-  if (prescription.expiryDate < getTodayIsoDate()) {
+  if (item.expiryDate && item.expiryDate < getTodayIsoDate()) {
     return PRESCRIPTION_STATUS.EXPIRED;
   }
 
-  const quantityLimit = Number(prescription.quantityLimit) || 0;
-  const dispensedQuantity = Number(prescription.dispensedQuantity) || 0;
-
-  if (quantityLimit > 0 && dispensedQuantity >= quantityLimit) {
+  if (item.quantityLimit > 0 && item.dispensedQuantity >= item.quantityLimit) {
     return PRESCRIPTION_STATUS.FULLY_DISPENSED;
   }
 
-  if (dispensedQuantity > 0) {
+  if (item.dispensedQuantity > 0) {
     return PRESCRIPTION_STATUS.PARTIALLY_DISPENSED;
   }
 
   return PRESCRIPTION_STATUS.VALID;
 }
 
-function withDispensingFields(prescription) {
-  const quantityLimit = Number(prescription.quantityLimit) || 0;
-  const dispensedQuantity = Math.max(0, Number(prescription.dispensedQuantity) || 0);
-  const remainingQuantity = Math.max(quantityLimit - dispensedQuantity, 0);
+function getPrescriptionStatus(prescription) {
+  if (prescription.cancelledAt) {
+    return PRESCRIPTION_STATUS.CANCELLED;
+  }
+
+  const items = normalizePrescriptionItems(prescription);
+  const itemStatuses = items.map((item) => getPrescriptionItemStatus(prescription, item));
+
+  if (itemStatuses.length > 0 && itemStatuses.every((status) => status === PRESCRIPTION_STATUS.EXPIRED)) {
+    return PRESCRIPTION_STATUS.EXPIRED;
+  }
+
+  if (itemStatuses.length > 0 && itemStatuses.every((status) => status === PRESCRIPTION_STATUS.FULLY_DISPENSED)) {
+    return PRESCRIPTION_STATUS.FULLY_DISPENSED;
+  }
+
+  if (itemStatuses.some((status) => status === PRESCRIPTION_STATUS.FULLY_DISPENSED || status === PRESCRIPTION_STATUS.PARTIALLY_DISPENSED)) {
+    return PRESCRIPTION_STATUS.PARTIALLY_DISPENSED;
+  }
+
+  return PRESCRIPTION_STATUS.VALID;
+}
+
+function stripItemForStorage(item) {
+  return {
+    itemId: item.itemId,
+    drugName: item.drugName,
+    antibioticName: item.drugName,
+    drugClass: item.drugClass,
+    antibioticClass: item.drugClass,
+    dosage: item.dosage,
+    quantityLimit: item.quantityLimit,
+    dispensedQuantity: item.dispensedQuantity,
+    treatmentDurationDays: item.treatmentDurationDays,
+    expiryDate: item.expiryDate
+  };
+}
+
+function preserveDispensedItems(items, existingItems = []) {
+  return items.map((item) => {
+    const existing = existingItems.find((candidate) => {
+      return candidate.itemId === item.itemId || (
+        normalizeMedicine(candidate.drugName) === normalizeMedicine(item.drugName) &&
+        normalizeMedicine(candidate.dosage) === normalizeMedicine(item.dosage)
+      );
+    });
+
+    if (!existing) {
+      return item;
+    }
+
+    return {
+      ...item,
+      dispensedQuantity: Math.min(item.quantityLimit, existing.dispensedQuantity ?? 0)
+    };
+  });
+}
+
+function preparePrescriptionForStorage(prescription) {
+  const items = normalizePrescriptionItems(prescription).map(stripItemForStorage);
+  const firstItem = items[0] ?? stripItemForStorage(normalizePrescriptionItem({}, 0, prescription));
 
   return {
     ...prescription,
+    hospitalId: normalizeText(prescription.hospitalId),
+    items,
+    antibioticName: firstItem.drugName,
+    antibioticClass: firstItem.drugClass,
+    dosage: firstItem.dosage,
+    quantityLimit: firstItem.quantityLimit,
+    treatmentDurationDays: firstItem.treatmentDurationDays,
+    expiryDate: firstItem.expiryDate
+  };
+}
+
+function withDispensingFields(prescription) {
+  const items = normalizePrescriptionItems(prescription).map((item) => ({
+    ...item,
+    prescriptionStatus: getPrescriptionItemStatus(prescription, item)
+  }));
+  const firstItem = items[0] ?? normalizePrescriptionItem({}, 0, prescription);
+  const totalQuantityLimit = items.reduce((sum, item) => sum + item.quantityLimit, 0);
+  const totalDispensedQuantity = items.reduce((sum, item) => sum + item.dispensedQuantity, 0);
+  const totalRemainingQuantity = items.reduce((sum, item) => sum + item.remainingQuantity, 0);
+
+  return {
+    ...prescription,
+    hospitalId: normalizeText(prescription.hospitalId),
+    items,
+    itemCount: items.length,
+    totalQuantityLimit,
+    totalDispensedQuantity,
+    totalRemainingQuantity,
+    antibioticName: firstItem.drugName,
+    drugName: firstItem.drugName,
+    antibioticClass: firstItem.drugClass,
+    drugClass: firstItem.drugClass,
+    dosage: firstItem.dosage,
+    quantityLimit: firstItem.quantityLimit,
+    treatmentDurationDays: firstItem.treatmentDurationDays,
+    expiryDate: firstItem.expiryDate,
     dispensedAt: prescription.dispensedAt ?? null,
     cancelledAt: prescription.cancelledAt ?? null,
-    dispensedQuantity,
-    remainingQuantity,
-    prescriptionStatus: getPrescriptionStatus({
-      ...prescription,
-      dispensedQuantity
-    })
+    dispensedQuantity: firstItem.dispensedQuantity,
+    remainingQuantity: firstItem.remainingQuantity,
+    prescriptionStatus: getPrescriptionStatus({ ...prescription, items })
   };
 }
 
@@ -500,6 +631,7 @@ class PostgresDatabase {
         id SERIAL PRIMARY KEY,
         prescription_id TEXT NOT NULL UNIQUE,
         doctor_id TEXT,
+        hospital_id TEXT NOT NULL DEFAULT '',
         patient_id TEXT NOT NULL,
         hospital_name TEXT NOT NULL DEFAULT '',
         prescriber_license TEXT NOT NULL,
@@ -516,6 +648,7 @@ class PostgresDatabase {
         dispensed_quantity INTEGER NOT NULL DEFAULT 0,
         dispensed_at TIMESTAMPTZ,
         cancelled_at TIMESTAMPTZ,
+        items JSONB,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
@@ -526,6 +659,8 @@ class PostgresDatabase {
         timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         prescription_id TEXT,
         pharmacy_id TEXT,
+        hospital_id TEXT,
+        item_id TEXT,
         patient_id TEXT,
         hospital_name TEXT,
         prescriber_license TEXT,
@@ -545,6 +680,7 @@ class PostgresDatabase {
 
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS prescription_id TEXT;');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS doctor_id TEXT;');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS hospital_id TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS hospital_name TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS antibiotic_class TEXT NOT NULL DEFAULT \'\';');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dosage TEXT NOT NULL DEFAULT \'\';');
@@ -556,6 +692,7 @@ class PostgresDatabase {
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dispensed_quantity INTEGER NOT NULL DEFAULT 0;');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS dispensed_at TIMESTAMPTZ;');
     await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;');
+    await this.pool.query('ALTER TABLE valid_prescriptions ADD COLUMN IF NOT EXISTS items JSONB;');
     await this.pool.query(`
       UPDATE valid_prescriptions
       SET dispensed_quantity = quantity_limit
@@ -566,11 +703,29 @@ class PostgresDatabase {
       SET prescription_id = 'RX-LEGACY-' || id::text
       WHERE prescription_id IS NULL OR prescription_id = '';
     `);
+    await this.pool.query(`
+      UPDATE valid_prescriptions
+      SET items = jsonb_build_array(jsonb_build_object(
+        'itemId', 'ITEM-1',
+        'drugName', antibiotic_name,
+        'antibioticName', antibiotic_name,
+        'drugClass', antibiotic_class,
+        'antibioticClass', antibiotic_class,
+        'dosage', dosage,
+        'quantityLimit', quantity_limit,
+        'dispensedQuantity', dispensed_quantity,
+        'treatmentDurationDays', treatment_duration_days,
+        'expiryDate', expiry_date::text
+      ))
+      WHERE items IS NULL;
+    `);
     await this.pool.query('ALTER TABLE valid_prescriptions ALTER COLUMN prescription_id SET NOT NULL;');
     await this.pool.query('ALTER TABLE valid_prescriptions DROP CONSTRAINT IF EXISTS valid_prescriptions_patient_id_prescriber_license_antibiotic_name_key;');
     await this.pool.query('CREATE UNIQUE INDEX IF NOT EXISTS valid_prescriptions_prescription_id_key ON valid_prescriptions (prescription_id);');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS prescription_id TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS pharmacy_id TEXT;');
+    await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS hospital_id TEXT;');
+    await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS item_id TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS hospital_name TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS antibiotic_class TEXT;');
     await this.pool.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS dosage TEXT;');
@@ -615,6 +770,10 @@ class PostgresDatabase {
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username TEXT UNIQUE,
+        doctor_id TEXT,
+        hospital_id TEXT,
+        pharmacy_id TEXT,
+        moh_id TEXT,
         name TEXT NOT NULL,
         email TEXT NOT NULL UNIQUE,
         role TEXT NOT NULL CHECK (role IN ('pharmacy', 'doctor', 'moh')),
@@ -624,10 +783,22 @@ class PostgresDatabase {
     `);
 
     await this.pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;');
+    await this.pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS doctor_id TEXT;');
+    await this.pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS hospital_id TEXT;');
+    await this.pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS pharmacy_id TEXT;');
+    await this.pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS moh_id TEXT;');
     await this.pool.query(`
       UPDATE users
       SET username = 'user-' || id::text
       WHERE username IS NULL OR username = '';
+    `);
+    await this.pool.query(`
+      UPDATE users
+      SET
+        doctor_id = CASE WHEN role = 'doctor' AND (doctor_id IS NULL OR doctor_id = '') THEN 'DOC-' || username ELSE doctor_id END,
+        hospital_id = CASE WHEN role = 'doctor' AND (hospital_id IS NULL OR hospital_id = '') THEN 'HOSP-' || username ELSE hospital_id END,
+        pharmacy_id = CASE WHEN role = 'pharmacy' AND (pharmacy_id IS NULL OR pharmacy_id = '') THEN 'PHARM-' || username ELSE pharmacy_id END,
+        moh_id = CASE WHEN role = 'moh' AND (moh_id IS NULL OR moh_id = '') THEN 'MOH-' || username ELSE moh_id END;
     `);
     await this.pool.query('ALTER TABLE users ALTER COLUMN username SET NOT NULL;');
     await this.pool.query('CREATE UNIQUE INDEX IF NOT EXISTS users_username_key ON users (username);');
@@ -715,6 +886,7 @@ class PostgresDatabase {
       SELECT
         prescription_id AS "prescriptionId",
         doctor_id AS "doctorId",
+        hospital_id AS "hospitalId",
         patient_id AS "patientId",
         hospital_name AS "hospitalName",
         prescriber_license AS "prescriberLicense",
@@ -732,6 +904,7 @@ class PostgresDatabase {
         GREATEST(quantity_limit - dispensed_quantity, 0) AS "remainingQuantity",
         dispensed_at AS "dispensedAt",
         cancelled_at AS "cancelledAt",
+        items,
         CASE
           WHEN cancelled_at IS NOT NULL THEN 'Cancelled'
           WHEN expiry_date < CURRENT_DATE THEN 'Expired'
@@ -743,15 +916,24 @@ class PostgresDatabase {
       ORDER BY patient_id, antibiotic_name;
     `);
 
-    return result.rows;
+    return result.rows.map((prescription) => withDispensingFields(prescription));
   }
 
   async savePrescription(prescription) {
+    const prepared = preparePrescriptionForStorage(prescription);
+    const existing = await this.findPrescriptionById(prepared.prescriptionId);
+
+    if (existing) {
+      prepared.items = preserveDispensedItems(prepared.items, existing.items).map(stripItemForStorage);
+      prepared.dispensedQuantity = prepared.items[0]?.dispensedQuantity ?? 0;
+    }
+
     const result = await this.pool.query(
       `
         INSERT INTO valid_prescriptions (
           prescription_id,
           doctor_id,
+          hospital_id,
           patient_id,
           hospital_name,
           prescriber_license,
@@ -764,12 +946,14 @@ class PostgresDatabase {
           main_diagnosis,
           icd10_code,
           clinical_notes,
-          drug_allergies
+          drug_allergies,
+          items
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb)
         ON CONFLICT (prescription_id)
         DO UPDATE SET
           doctor_id = EXCLUDED.doctor_id,
+          hospital_id = EXCLUDED.hospital_id,
           hospital_name = EXCLUDED.hospital_name,
           patient_id = EXCLUDED.patient_id,
           prescriber_license = EXCLUDED.prescriber_license,
@@ -782,10 +966,12 @@ class PostgresDatabase {
           main_diagnosis = EXCLUDED.main_diagnosis,
           icd10_code = EXCLUDED.icd10_code,
           clinical_notes = EXCLUDED.clinical_notes,
-          drug_allergies = EXCLUDED.drug_allergies
+          drug_allergies = EXCLUDED.drug_allergies,
+          items = EXCLUDED.items
         RETURNING
           prescription_id AS "prescriptionId",
           doctor_id AS "doctorId",
+          hospital_id AS "hospitalId",
           patient_id AS "patientId",
           hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
@@ -803,6 +989,7 @@ class PostgresDatabase {
           GREATEST(quantity_limit - dispensed_quantity, 0) AS "remainingQuantity",
           dispensed_at AS "dispensedAt",
           cancelled_at AS "cancelledAt",
+          items,
           CASE
             WHEN cancelled_at IS NOT NULL THEN 'Cancelled'
             WHEN expiry_date < CURRENT_DATE THEN 'Expired'
@@ -812,25 +999,27 @@ class PostgresDatabase {
           END AS "prescriptionStatus";
       `,
       [
-        prescription.prescriptionId,
-        prescription.doctorId ?? null,
-        prescription.patientId,
-        prescription.hospitalName,
-        prescription.prescriberLicense,
-        prescription.antibioticName,
-        prescription.antibioticClass,
-        prescription.dosage,
-        prescription.quantityLimit,
-        prescription.treatmentDurationDays,
-        prescription.expiryDate,
-        prescription.mainDiagnosis,
-        prescription.icd10Code,
-        prescription.clinicalNotes,
-        prescription.drugAllergies
+        prepared.prescriptionId,
+        prepared.doctorId ?? null,
+        prepared.hospitalId,
+        prepared.patientId,
+        prepared.hospitalName,
+        prepared.prescriberLicense,
+        prepared.antibioticName,
+        prepared.antibioticClass,
+        prepared.dosage,
+        prepared.quantityLimit,
+        prepared.treatmentDurationDays,
+        prepared.expiryDate,
+        prepared.mainDiagnosis,
+        prepared.icd10Code,
+        prepared.clinicalNotes,
+        prepared.drugAllergies,
+        JSON.stringify(prepared.items)
       ]
     );
 
-    return result.rows[0];
+    return withDispensingFields(result.rows[0]);
   }
 
   async findPrescriptionById(prescriptionId) {
@@ -839,6 +1028,7 @@ class PostgresDatabase {
         SELECT
           prescription_id AS "prescriptionId",
           doctor_id AS "doctorId",
+          hospital_id AS "hospitalId",
           patient_id AS "patientId",
           hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
@@ -856,6 +1046,7 @@ class PostgresDatabase {
           GREATEST(quantity_limit - dispensed_quantity, 0) AS "remainingQuantity",
           dispensed_at AS "dispensedAt",
           cancelled_at AS "cancelledAt",
+          items,
           CASE
             WHEN cancelled_at IS NOT NULL THEN 'Cancelled'
             WHEN expiry_date < CURRENT_DATE THEN 'Expired'
@@ -870,22 +1061,50 @@ class PostgresDatabase {
       [prescriptionId]
     );
 
-    return result.rows[0] ?? null;
+    return result.rows[0] ? withDispensingFields(result.rows[0]) : null;
   }
 
-  async addPrescriptionDispense(prescriptionId, quantity) {
+  async addPrescriptionDispense(prescriptionId, quantity, itemId = '') {
+    const prescription = await this.findPrescriptionById(prescriptionId);
+
+    if (!prescription) {
+      return;
+    }
+
+    const normalizedItemId = normalizeText(itemId).toLowerCase();
+    const targetItem = normalizedItemId
+      ? prescription.items.find((item) => item.itemId.toLowerCase() === normalizedItemId)
+      : prescription.items[0];
+
+    if (!targetItem) {
+      return;
+    }
+
+    const updatedItems = prescription.items.map((item) => {
+      if (item.itemId !== targetItem.itemId) {
+        return stripItemForStorage(item);
+      }
+
+      return stripItemForStorage({
+        ...item,
+        dispensedQuantity: Math.min(item.quantityLimit, item.dispensedQuantity + quantity)
+      });
+    });
+    const allDispensed = updatedItems.every((item) => item.quantityLimit > 0 && item.dispensedQuantity >= item.quantityLimit);
+
     await this.pool.query(
       `
         UPDATE valid_prescriptions
         SET
-          dispensed_quantity = LEAST(quantity_limit, dispensed_quantity + $2),
+          items = $2::jsonb,
+          dispensed_quantity = $3,
           dispensed_at = CASE
-            WHEN dispensed_quantity + $2 >= quantity_limit THEN COALESCE(dispensed_at, NOW())
+            WHEN $4 THEN COALESCE(dispensed_at, NOW())
             ELSE dispensed_at
           END
         WHERE LOWER(prescription_id) = LOWER($1);
       `,
-      [prescriptionId, quantity]
+      [prescriptionId, JSON.stringify(updatedItems), updatedItems[0]?.dispensedQuantity ?? 0, allDispensed]
     );
   }
 
@@ -906,6 +1125,8 @@ class PostgresDatabase {
         INSERT INTO transactions (
           prescription_id,
           pharmacy_id,
+          hospital_id,
+          item_id,
           patient_id,
           hospital_name,
           prescriber_license,
@@ -921,12 +1142,14 @@ class PostgresDatabase {
           pharmacist_license,
           override_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING
           id,
           timestamp,
           prescription_id AS "prescriptionId",
           pharmacy_id AS "pharmacyId",
+          hospital_id AS "hospitalId",
+          item_id AS "itemId",
           patient_id AS "patientId",
           hospital_name AS "hospitalName",
           prescriber_license AS "prescriberLicense",
@@ -945,6 +1168,8 @@ class PostgresDatabase {
       [
         transaction.prescriptionId,
         transaction.pharmacyId ?? null,
+        transaction.hospitalId ?? null,
+        transaction.itemId ?? null,
         transaction.patientId,
         transaction.hospitalName,
         transaction.prescriberLicense,
@@ -972,6 +1197,8 @@ class PostgresDatabase {
         timestamp,
         prescription_id AS "prescriptionId",
         pharmacy_id AS "pharmacyId",
+        hospital_id AS "hospitalId",
+        item_id AS "itemId",
         patient_id AS "patientId",
         hospital_name AS "hospitalName",
         prescriber_license AS "prescriberLicense",
@@ -1004,17 +1231,31 @@ class PostgresDatabase {
   async createUser(user) {
     const result = await this.pool.query(
       `
-        INSERT INTO users (username, name, email, role, password_hash)
-        VALUES (LOWER($1), $2, LOWER($3), $4, $5)
+        INSERT INTO users (username, doctor_id, hospital_id, pharmacy_id, moh_id, name, email, role, password_hash)
+        VALUES (LOWER($1), $2, $3, $4, $5, $6, LOWER($7), $8, $9)
         RETURNING
           id,
           username,
+          doctor_id AS "doctorId",
+          hospital_id AS "hospitalId",
+          pharmacy_id AS "pharmacyId",
+          moh_id AS "mohId",
           name,
           email,
           role,
           created_at AS "createdAt";
       `,
-      [user.username, user.name, user.email, user.role, user.passwordHash]
+      [
+        user.username,
+        user.doctorId ?? null,
+        user.hospitalId ?? null,
+        user.pharmacyId ?? null,
+        user.mohId ?? null,
+        user.name,
+        user.email,
+        user.role,
+        user.passwordHash
+      ]
     );
 
     return result.rows[0];
@@ -1026,6 +1267,10 @@ class PostgresDatabase {
         SELECT
           id,
           username,
+          doctor_id AS "doctorId",
+          hospital_id AS "hospitalId",
+          pharmacy_id AS "pharmacyId",
+          moh_id AS "mohId",
           name,
           email,
           role,
@@ -1047,6 +1292,10 @@ class PostgresDatabase {
         SELECT
           id,
           username,
+          doctor_id AS "doctorId",
+          hospital_id AS "hospitalId",
+          pharmacy_id AS "pharmacyId",
+          moh_id AS "mohId",
           name,
           email,
           role,
@@ -1068,6 +1317,10 @@ class PostgresDatabase {
         SELECT
           id,
           username,
+          doctor_id AS "doctorId",
+          hospital_id AS "hospitalId",
+          pharmacy_id AS "pharmacyId",
+          moh_id AS "mohId",
           name,
           email,
           role,
@@ -1099,6 +1352,10 @@ class PostgresDatabase {
         SELECT
           u.id,
           u.username,
+          u.doctor_id AS "doctorId",
+          u.hospital_id AS "hospitalId",
+          u.pharmacy_id AS "pharmacyId",
+          u.moh_id AS "mohId",
           u.name,
           u.email,
           u.role,
@@ -1265,6 +1522,33 @@ class JsonFileDatabase {
   migrateSeedPrescriptionFields() {
     let changed = false;
 
+    const ensurePrescriptionItems = (prescription) => {
+      const prepared = preparePrescriptionForStorage({
+        ...prescription,
+        hospitalId: prescription.hospitalId ?? ''
+      });
+      const nextPrescription = {
+        ...prescription,
+        hospitalId: prepared.hospitalId,
+        antibioticName: prepared.antibioticName,
+        antibioticClass: prepared.antibioticClass,
+        dosage: prepared.dosage,
+        quantityLimit: prepared.quantityLimit,
+        treatmentDurationDays: prepared.treatmentDurationDays,
+        expiryDate: prepared.expiryDate,
+        items: prepared.items
+      };
+
+      if (
+        prescription.hospitalId === undefined ||
+        JSON.stringify(prescription.items ?? null) !== JSON.stringify(prepared.items)
+      ) {
+        changed = true;
+      }
+
+      return nextPrescription;
+    };
+
     this.state.validPrescriptions = this.state.validPrescriptions.map((prescription, index) => {
       const seed = LEGACY_DEMO_PRESCRIPTIONS.find((item) => {
         return (
@@ -1292,13 +1576,13 @@ class JsonFileDatabase {
       if (!seed) {
         if (!prescription.hospitalName) {
           changed = true;
-          return {
+          return ensurePrescriptionItems({
             ...prescriptionWithId,
             hospitalName: 'Unknown Hospital / Clinic'
-          };
+          });
         }
 
-        return prescriptionWithId;
+        return ensurePrescriptionItems(prescriptionWithId);
       }
 
       const merged = {
@@ -1320,7 +1604,7 @@ class JsonFileDatabase {
         changed = true;
       }
 
-      return merged;
+      return ensurePrescriptionItems(merged);
     });
 
     return changed;
@@ -1353,6 +1637,28 @@ class JsonFileDatabase {
     this.state.users.forEach((user) => {
       if (!user.username) {
         user.username = `user-${user.id}`;
+        changed = true;
+      }
+
+      if (user.role === 'doctor') {
+        if (!user.doctorId) {
+          user.doctorId = `DOC-${user.username}`;
+          changed = true;
+        }
+
+        if (!user.hospitalId) {
+          user.hospitalId = `HOSP-${user.username}`;
+          changed = true;
+        }
+      }
+
+      if (user.role === 'pharmacy' && !user.pharmacyId) {
+        user.pharmacyId = `PHARM-${user.username}`;
+        changed = true;
+      }
+
+      if (user.role === 'moh' && !user.mohId) {
+        user.mohId = `MOH-${user.username}`;
         changed = true;
       }
     });
@@ -1436,21 +1742,24 @@ class JsonFileDatabase {
   }
 
   async savePrescription(prescription) {
+    const prepared = preparePrescriptionForStorage(prescription);
     const existingIndex = this.state.validPrescriptions.findIndex((item) => {
-      return normalizeText(item.prescriptionId).toLowerCase() === normalizeText(prescription.prescriptionId).toLowerCase();
+      return normalizeText(item.prescriptionId).toLowerCase() === normalizeText(prepared.prescriptionId).toLowerCase();
     });
 
     if (existingIndex >= 0) {
+      const existing = withDispensingFields(this.state.validPrescriptions[existingIndex]);
+      prepared.items = preserveDispensedItems(prepared.items, existing.items).map(stripItemForStorage);
       this.state.validPrescriptions[existingIndex] = {
         ...this.state.validPrescriptions[existingIndex],
-        ...prescription,
+        ...prepared,
         dispensedQuantity: this.state.validPrescriptions[existingIndex].dispensedQuantity ?? 0,
         dispensedAt: this.state.validPrescriptions[existingIndex].dispensedAt ?? null,
         cancelledAt: this.state.validPrescriptions[existingIndex].cancelledAt ?? null
       };
     } else {
       this.state.validPrescriptions.push({
-        ...prescription,
+        ...prepared,
         dispensedQuantity: 0,
         dispensedAt: null,
         cancelledAt: null
@@ -1477,7 +1786,7 @@ class JsonFileDatabase {
     return clone(withDispensingFields(prescription));
   }
 
-  async addPrescriptionDispense(prescriptionId, quantity) {
+  async addPrescriptionDispense(prescriptionId, quantity, itemId = '') {
     const prescription = this.state.validPrescriptions.find((item) => {
       return normalizeText(item.prescriptionId).toLowerCase() === normalizeText(prescriptionId).toLowerCase();
     });
@@ -1486,12 +1795,29 @@ class JsonFileDatabase {
       return;
     }
 
-    prescription.dispensedQuantity = Math.min(
-      Number(prescription.quantityLimit) || 0,
-      (Number(prescription.dispensedQuantity) || 0) + quantity
-    );
+    const hydrated = withDispensingFields(prescription);
+    const normalizedItemId = normalizeText(itemId).toLowerCase();
+    const targetItem = normalizedItemId
+      ? hydrated.items.find((item) => item.itemId.toLowerCase() === normalizedItemId)
+      : hydrated.items[0];
 
-    if (prescription.dispensedQuantity >= prescription.quantityLimit) {
+    if (!targetItem) {
+      return;
+    }
+
+    prescription.items = hydrated.items.map((item) => {
+      if (item.itemId !== targetItem.itemId) {
+        return stripItemForStorage(item);
+      }
+
+      return stripItemForStorage({
+        ...item,
+        dispensedQuantity: Math.min(item.quantityLimit, item.dispensedQuantity + quantity)
+      });
+    });
+    prescription.dispensedQuantity = prescription.items[0]?.dispensedQuantity ?? 0;
+
+    if (prescription.items.every((item) => item.quantityLimit > 0 && item.dispensedQuantity >= item.quantityLimit)) {
       prescription.dispensedAt = prescription.dispensedAt ?? new Date().toISOString();
     }
 
@@ -1517,6 +1843,8 @@ class JsonFileDatabase {
       timestamp: new Date().toISOString(),
       prescriptionId: transaction.prescriptionId,
       pharmacyId: transaction.pharmacyId ?? null,
+      hospitalId: transaction.hospitalId ?? null,
+      itemId: transaction.itemId ?? null,
       patientId: transaction.patientId,
       hospitalName: transaction.hospitalName,
       prescriberLicense: transaction.prescriberLicense,
@@ -1563,6 +1891,10 @@ class JsonFileDatabase {
     const saved = {
       id: this.state.counters.users,
       username: normalizeText(user.username).toLowerCase(),
+      doctorId: user.doctorId ?? null,
+      hospitalId: user.hospitalId ?? null,
+      pharmacyId: user.pharmacyId ?? null,
+      mohId: user.mohId ?? null,
       name: normalizeText(user.name),
       email: normalizedEmail,
       role: user.role,
@@ -1577,6 +1909,10 @@ class JsonFileDatabase {
     return clone({
       id: saved.id,
       username: saved.username,
+      doctorId: saved.doctorId,
+      hospitalId: saved.hospitalId,
+      pharmacyId: saved.pharmacyId,
+      mohId: saved.mohId,
       name: saved.name,
       email: saved.email,
       role: saved.role,
@@ -1633,6 +1969,10 @@ class JsonFileDatabase {
     return clone({
       id: user.id,
       username: user.username,
+      doctorId: user.doctorId,
+      hospitalId: user.hospitalId,
+      pharmacyId: user.pharmacyId,
+      mohId: user.mohId,
       name: user.name,
       email: user.email,
       role: user.role,

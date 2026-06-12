@@ -90,7 +90,7 @@ async function main() {
     })
   });
   assert(doctorPrescription.prescription.patientId === '88888', 'Doctor prescription was not saved.');
-  assert(doctorPrescription.prescription.doctorId === `smoke-doctor-${runId}`, 'Doctor ID was not synced from the account.');
+  assert(doctorPrescription.prescription.doctorId === `DOC-smoke-doctor-${runId}`, 'Doctor ID was not synced from the account.');
   console.log('OK doctor prescription saved');
 
   const lookup = await request(`/api/prescriptions/${cefiximePrescriptionId}`, { token: auth.pharmacy });
@@ -107,7 +107,7 @@ async function main() {
     })
   });
   assert(doctorApproved.transaction.status === 'Approved', 'Doctor-created prescription was not approved by POS.');
-  assert(doctorApproved.transaction.pharmacyId === `smoke-pharmacy-${runId}`, 'Pharmacy ID was not synced from the account.');
+  assert(doctorApproved.transaction.pharmacyId === `PHARM-smoke-pharmacy-${runId}`, 'Pharmacy ID was not synced from the account.');
   assert(doctorApproved.transaction.prescriptionStatus === 'Valid', 'Approved transaction did not report Valid prescription status.');
   console.log('OK partial dispense verified by POS');
 

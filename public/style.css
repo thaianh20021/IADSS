@@ -90,6 +90,7 @@ body:not(.auth-locked) .auth-view { display: none; }
 }
 .auth-form input, .auth-form select, .transaction-form input, .transaction-form select, .inline-lookup input { min-height: 42px; padding: 0 12px; }
 .transaction-form textarea, .bulk-form textarea { min-height: 104px; padding: 12px; resize: vertical; }
+.role-id-field[hidden] { display: none !important; }
 input:focus, select:focus, textarea:focus { border-color: var(--primary) !important; box-shadow: 0 0 0 2px rgba(0,63,135,.18); }
 
 .app-layout { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); min-height: 100vh; background: var(--surface); }
@@ -146,6 +147,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary) !import
 .prescription-summary div { display: grid; gap: 6px; }
 .prescription-summary strong { color: var(--primary); }
 .prescription-summary span { color: var(--on-variant); }
+.prescription-item-list { display: grid; gap: 10px; }
+.prescription-item-button { display: grid; gap: 4px; width: 100%; border: 1px solid var(--outline-variant); border-radius: 10px; padding: 12px; background: #fff; color: var(--on-surface); text-align: left; }
+.prescription-item-button:hover, .prescription-item-button.selected { border-color: var(--primary); background: var(--primary-fixed); }
+.prescription-item-button small { color: var(--on-variant); font-weight: 700; }
 .qr-scanner { display: grid; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid var(--outline-variant); border-radius: 8px; }
 .qr-scanner video { width: 100%; max-height: 300px; border-radius: 8px; background: #111827; object-fit: cover; }
 .qr-scanner-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--on-variant); font-size: 12px; font-weight: 700; }
@@ -159,6 +164,15 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary) !import
 .override-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .form-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; grid-column: 1 / -1; margin-top: 4px; }
 .lookup-source { color: var(--on-variant); font-size: 12px; }
+.medication-list { display: grid; gap: 14px; border: 1px solid var(--outline-variant); border-radius: 12px; padding: 16px; background: var(--surface-lowest); }
+.medication-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.medication-list-heading h3 { color: var(--on-surface); font-size: 18px; }
+.medication-list-heading p { color: var(--on-variant); font-size: 13px; }
+.medication-item { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; border: 1px solid var(--outline-variant); border-radius: 10px; padding: 14px; background: var(--surface-low); }
+.medication-item-title { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--primary); }
+.medication-summary { display: grid; gap: 3px; }
+.medication-summary strong { color: var(--primary); }
+.medication-summary span { color: var(--on-variant); font-size: 12px; }
 
 .primary-button, .secondary-button, .ghost-button, .danger-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; border-radius: 8px; padding: 0 16px; font-weight: 800; }
 .primary-button { border: 1px solid var(--primary); background: var(--primary); color: #fff; }
@@ -270,9 +284,10 @@ tr.overridden-row { box-shadow: inset 4px 0 0 #ffb300; background: #fffdf7; }
   .header-actions { align-items: stretch; flex-direction: column; }
   .global-search { min-width: 0; width: 100%; }
   .app-shell { width: min(100% - 28px, 1220px); margin: 24px auto 42px; }
-  .tab-bar, .role-grid, .transaction-form, .override-fields, .docs-grid, .settings-grid, .settings-form, .inline-lookup { grid-template-columns: 1fr; }
+  .tab-bar, .role-grid, .transaction-form, .override-fields, .docs-grid, .settings-grid, .settings-form, .inline-lookup, .medication-item { grid-template-columns: 1fr; }
   .metrics-grid { grid-template-columns: 1fr; }
-  .wide-field { grid-column: auto; }
+  .wide-field, .medication-item-title { grid-column: auto; }
+  .medication-list-heading { align-items: stretch; flex-direction: column; }
   .primary-button, .secondary-button, .ghost-button, .danger-button, .sidebar-cta, .sidebar-logout { width: 100%; }
   .icon-action { width: 100%; }
   th, td { padding: 10px; font-size: 13px; }

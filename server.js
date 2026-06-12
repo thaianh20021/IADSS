@@ -61,6 +61,10 @@ function sanitizeUser(user) {
   }
 
   const accountId = user.username;
+  const defaultDoctorId = `DOC-${accountId}`;
+  const defaultHospitalId = `HOSP-${accountId}`;
+  const defaultPharmacyId = `PHARM-${accountId}`;
+  const defaultMohId = `MOH-${accountId}`;
   const sanitized = {
     id: user.id,
     username: user.username,
@@ -72,18 +76,34 @@ function sanitizeUser(user) {
   };
 
   if (user.role === 'pharmacy') {
-    sanitized.pharmacyId = accountId;
+    sanitized.pharmacyId = user.pharmacyId || defaultPharmacyId;
   }
 
   if (user.role === 'doctor') {
-    sanitized.doctorId = accountId;
+    sanitized.doctorId = user.doctorId || defaultDoctorId;
+    sanitized.hospitalId = user.hospitalId || defaultHospitalId;
   }
 
   if (user.role === 'moh') {
-    sanitized.mohId = accountId;
+    sanitized.mohId = user.mohId || defaultMohId;
   }
 
   return sanitized;
+}
+
+function getRoleIds(userInput) {
+  const username = userInput.username;
+  const doctorId = normalizeInput(userInput.doctorId) || `DOC-${username}`;
+  const hospitalId = normalizeInput(userInput.hospitalId) || `HOSP-${username}`;
+  const pharmacyId = normalizeInput(userInput.pharmacyId) || `PHARM-${username}`;
+  const mohId = normalizeInput(userInput.mohId) || `MOH-${username}`;
+
+  return {
+    doctorId: userInput.role === 'doctor' ? doctorId : null,
+    hospitalId: userInput.role === 'doctor' ? hospitalId : null,
+    pharmacyId: userInput.role === 'pharmacy' ? pharmacyId : null,
+    mohId: userInput.role === 'moh' ? mohId : null
+  };
 }
 
 function hashPassword(password) {
@@ -130,6 +150,10 @@ function validateAuthPayload(payload, mode) {
   const name = normalizeInput(payload.name);
   const role = normalizeInput(payload.role).toLowerCase();
   const username = normalizeInput(payload.username).toLowerCase();
+  const doctorId = normalizeInput(payload.doctorId);
+  const hospitalId = normalizeInput(payload.hospitalId);
+  const pharmacyId = normalizeInput(payload.pharmacyId);
+  const mohId = normalizeInput(payload.mohId);
 
   if (mode === 'login') {
     if (!identifier) {
@@ -164,7 +188,11 @@ function validateAuthPayload(payload, mode) {
       password,
       name,
       role,
-      username
+      username,
+      doctorId,
+      hospitalId,
+      pharmacyId,
+      mohId
     }
   };
 }
@@ -184,33 +212,86 @@ async function createAuthSession(db, user) {
   };
 }
 
+function toWholeNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : fallback;
+}
+
+function normalizePrescriptionItem(item, index, fallback = {}) {
+  const source = item ?? {};
+  const drugName = normalizeInput(source.drugName ?? source.antibioticName ?? source.drug ?? source.antibiotic ?? fallback.antibioticName ?? fallback.drugName);
+  const drugClass = normalizeInput(source.drugClass ?? source.antibioticClass ?? fallback.antibioticClass ?? fallback.drugClass);
+  const quantityLimit = toWholeNumber(source.quantityLimit ?? source.quantity ?? fallback.quantityLimit);
+  const dispensedQuantity = Math.min(toWholeNumber(source.dispensedQuantity ?? 0), quantityLimit || Number.MAX_SAFE_INTEGER);
+
+  return {
+    itemId: normalizeInput(source.itemId ?? source.id) || `ITEM-${index + 1}`,
+    drugName,
+    antibioticName: drugName,
+    drugClass,
+    antibioticClass: drugClass,
+    dosage: normalizeInput(source.dosage ?? fallback.dosage),
+    quantityLimit,
+    dispensedQuantity,
+    remainingQuantity: Math.max(quantityLimit - dispensedQuantity, 0),
+    treatmentDurationDays: toWholeNumber(source.treatmentDurationDays ?? fallback.treatmentDurationDays, 1) || 1,
+    expiryDate: normalizeInput(source.expiryDate ?? fallback.expiryDate),
+    prescriptionStatus: source.prescriptionStatus ?? fallback.prescriptionStatus ?? PRESCRIPTION_STATUS.VALID
+  };
+}
+
+function normalizePrescriptionItems(payload) {
+  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+  const sourceItems = rawItems.length > 0 ? rawItems : [payload];
+
+  return sourceItems
+    .map((item, index) => normalizePrescriptionItem(item, index, payload))
+    .filter((item) => item.drugName || item.drugClass || item.dosage || item.quantityLimit > 0);
+}
+
+function summarizePrescriptionItems(items) {
+  const names = items.map((item) => item.drugName).filter(Boolean);
+  return names.length > 1 ? `${names.length} medicines: ${names.join(', ')}` : names[0] ?? '';
+}
+
 function sanitizePrescriptionForPharmacy(prescription) {
   if (!prescription) {
     return null;
   }
 
+  const items = normalizePrescriptionItems(prescription);
+  const firstItem = items[0] ?? normalizePrescriptionItem({}, 0, prescription);
+
   return {
     prescriptionId: prescription.prescriptionId,
     doctorId: prescription.doctorId,
+    hospitalId: prescription.hospitalId,
     patientId: prescription.patientId,
     hospitalName: prescription.hospitalName,
     prescriberLicense: prescription.prescriberLicense,
-    drugName: prescription.antibioticName,
-    antibioticName: prescription.antibioticName,
-    drugClass: prescription.antibioticClass,
-    antibioticClass: prescription.antibioticClass,
-    dosage: prescription.dosage,
-    quantityLimit: prescription.quantityLimit,
-    dispensedQuantity: prescription.dispensedQuantity ?? 0,
-    remainingQuantity: prescription.remainingQuantity ?? prescription.quantityLimit,
-    treatmentDurationDays: prescription.treatmentDurationDays,
-    expiryDate: prescription.expiryDate,
+    itemCount: items.length,
+    itemSummary: summarizePrescriptionItems(items),
+    items,
+    drugName: firstItem.drugName,
+    antibioticName: firstItem.drugName,
+    drugClass: firstItem.drugClass,
+    antibioticClass: firstItem.drugClass,
+    dosage: firstItem.dosage,
+    quantityLimit: firstItem.quantityLimit,
+    dispensedQuantity: firstItem.dispensedQuantity ?? 0,
+    remainingQuantity: firstItem.remainingQuantity ?? firstItem.quantityLimit,
+    treatmentDurationDays: firstItem.treatmentDurationDays,
+    expiryDate: firstItem.expiryDate,
+    totalQuantityLimit: prescription.totalQuantityLimit,
+    totalDispensedQuantity: prescription.totalDispensedQuantity,
+    totalRemainingQuantity: prescription.totalRemainingQuantity,
     prescriptionStatus: prescription.prescriptionStatus
   };
 }
 
 function canManagePrescription(user, prescription) {
-  return user.role === 'moh' || prescription.doctorId === user.username;
+  const doctorId = sanitizeUser(user)?.doctorId;
+  return user.role === 'moh' || prescription.doctorId === user.username || prescription.doctorId === doctorId;
 }
 
 function isFreshCache(cached) {
@@ -424,7 +505,9 @@ function evaluateRequiredFields({
 
 async function evaluateTransaction(db, payload) {
   const prescriptionId = normalizeInput(payload.prescriptionId);
+  const itemId = normalizeInput(payload.itemId);
   const patientId = normalizeInput(payload.patientId);
+  const hospitalId = normalizeInput(payload.hospitalId);
   const hospitalName = normalizeInput(payload.hospitalName);
   const prescriberLicense = normalizeInput(payload.prescriberLicense);
   const antibiotic = normalizeInput(payload.drugName ?? payload.drug ?? payload.antibiotic);
@@ -441,7 +524,9 @@ async function evaluateTransaction(db, payload) {
   if (missingReason) {
     return {
       prescriptionId,
+      itemId,
       patientId,
+      hospitalId,
       hospitalName,
       prescriberLicense,
       antibiotic,
@@ -456,16 +541,32 @@ async function evaluateTransaction(db, payload) {
   }
 
   const prescription = await db.findPrescriptionById(prescriptionId);
+  const prescriptionItems = prescription ? normalizePrescriptionItems(prescription) : [];
+  let selectedItem = null;
+
+  if (prescription) {
+    if (itemId) {
+      selectedItem = prescriptionItems.find((item) => item.itemId.toLowerCase() === itemId.toLowerCase()) ?? null;
+    } else if (prescriptionItems.length === 1) {
+      selectedItem = prescriptionItems[0];
+    } else if (antibiotic) {
+      const matches = prescriptionItems.filter((item) => item.drugName.toLowerCase() === antibiotic.toLowerCase());
+      selectedItem = matches.length === 1 ? matches[0] : null;
+    }
+  }
+
   const transactionRecord = {
     prescriptionId,
+    itemId: selectedItem?.itemId || itemId || '',
     patientId: patientId || prescription?.patientId || '',
+    hospitalId: hospitalId || prescription?.hospitalId || '',
     hospitalName: hospitalName || prescription?.hospitalName || '',
     prescriberLicense: prescriberLicense || prescription?.prescriberLicense || '',
-    antibiotic: antibiotic || prescription?.antibioticName || '',
-    antibioticClass: antibioticClass || prescription?.antibioticClass || '',
-    dosage: dosage || prescription?.dosage || '',
+    antibiotic: antibiotic || selectedItem?.drugName || prescription?.antibioticName || '',
+    antibioticClass: antibioticClass || selectedItem?.drugClass || prescription?.antibioticClass || '',
+    dosage: dosage || selectedItem?.dosage || prescription?.dosage || '',
     quantity,
-    treatmentDurationDays: Number.isFinite(treatmentDurationDays) ? treatmentDurationDays : prescription?.treatmentDurationDays ?? null
+    treatmentDurationDays: Number.isFinite(treatmentDurationDays) ? treatmentDurationDays : selectedItem?.treatmentDurationDays ?? prescription?.treatmentDurationDays ?? null
   };
 
   if (!prescription) {
@@ -474,6 +575,17 @@ async function evaluateTransaction(db, payload) {
       prescriptionStatus: PRESCRIPTION_STATUS.INVALID,
       status: 'Blocked',
       reason: 'Prescription ID was not found.'
+    };
+  }
+
+  if (!selectedItem) {
+    return {
+      ...transactionRecord,
+      prescriptionStatus: prescription.prescriptionStatus,
+      status: 'Blocked',
+      reason: itemId
+        ? 'Medicine item ID was not found in this prescription.'
+        : 'Multiple medicines in this prescription. Select a medicine item before dispensing.'
     };
   }
 
@@ -504,8 +616,27 @@ async function evaluateTransaction(db, payload) {
     };
   }
 
+  if (selectedItem.prescriptionStatus === PRESCRIPTION_STATUS.EXPIRED) {
+    return {
+      ...transactionRecord,
+      prescriptionStatus: PRESCRIPTION_STATUS.EXPIRED,
+      status: 'Blocked',
+      reason: 'Medicine item status is Expired.'
+    };
+  }
+
+  if (selectedItem.prescriptionStatus === PRESCRIPTION_STATUS.FULLY_DISPENSED) {
+    return {
+      ...transactionRecord,
+      prescriptionStatus: PRESCRIPTION_STATUS.FULLY_DISPENSED,
+      status: 'Blocked',
+      reason: 'Medicine item status is Fully Dispensed.'
+    };
+  }
+
   if (
     (patientId && prescription.patientId !== patientId) ||
+    (hospitalId && prescription.hospitalId && prescription.hospitalId.toLowerCase() !== hospitalId.toLowerCase()) ||
     (prescriberLicense && prescription.prescriberLicense !== prescriberLicense) ||
     (hospitalName && prescription.hospitalName.toLowerCase() !== hospitalName.toLowerCase())
   ) {
@@ -517,48 +648,48 @@ async function evaluateTransaction(db, payload) {
     };
   }
 
-  if (antibiotic && prescription.antibioticName.toLowerCase() !== antibiotic.toLowerCase()) {
+  if (antibiotic && selectedItem.drugName.toLowerCase() !== antibiotic.toLowerCase()) {
     return {
       ...transactionRecord,
       prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
-      reason: `Drug does not match prescription drug ${prescription.antibioticName}.`
+      reason: `Drug does not match prescription drug ${selectedItem.drugName}.`
     };
   }
 
-  if (antibioticClass && prescription.antibioticClass.toLowerCase() !== antibioticClass.toLowerCase()) {
+  if (antibioticClass && selectedItem.drugClass.toLowerCase() !== antibioticClass.toLowerCase()) {
     return {
       ...transactionRecord,
       prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
-      reason: `Drug class does not match prescription class ${prescription.antibioticClass}.`
+      reason: `Drug class does not match prescription class ${selectedItem.drugClass}.`
     };
   }
 
-  if (dosage && prescription.dosage.toLowerCase() !== dosage.toLowerCase()) {
+  if (dosage && selectedItem.dosage.toLowerCase() !== dosage.toLowerCase()) {
     return {
       ...transactionRecord,
       prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
-      reason: `Dosage does not match prescription dosage ${prescription.dosage}.`
+      reason: `Dosage does not match prescription dosage ${selectedItem.dosage}.`
     };
   }
 
-  if (quantity > prescription.remainingQuantity) {
+  if (quantity > selectedItem.remainingQuantity) {
     return {
       ...transactionRecord,
       prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
-      reason: `Dispense quantity exceeds remaining quantity of ${prescription.remainingQuantity}.`
+      reason: `Dispense quantity exceeds remaining quantity of ${selectedItem.remainingQuantity}.`
     };
   }
 
-  if (Number.isFinite(treatmentDurationDays) && treatmentDurationDays > prescription.treatmentDurationDays) {
+  if (Number.isFinite(treatmentDurationDays) && treatmentDurationDays > selectedItem.treatmentDurationDays) {
     return {
       ...transactionRecord,
       prescriptionStatus: prescription.prescriptionStatus,
       status: 'Blocked',
-      reason: `Treatment duration exceeds prescription duration of ${prescription.treatmentDurationDays} days.`
+      reason: `Treatment duration exceeds prescription duration of ${selectedItem.treatmentDurationDays} days.`
     };
   }
 
@@ -600,66 +731,71 @@ function applyAuditedOverride(evaluated, payload) {
 function validatePrescriptionPayload(payload) {
   const prescriptionId = normalizeInput(payload.prescriptionId);
   const patientId = normalizeInput(payload.patientId);
+  const hospitalId = normalizeInput(payload.hospitalId);
   const hospitalName = normalizeInput(payload.hospitalName);
   const prescriberLicense = normalizeInput(payload.prescriberLicense);
-  const antibioticName = normalizeInput(payload.drugName ?? payload.antibioticName ?? payload.drug ?? payload.antibiotic);
-  const antibioticClass = normalizeInput(payload.drugClass ?? payload.antibioticClass);
-  const dosage = normalizeInput(payload.dosage);
-  const quantityLimit = Number(payload.quantityLimit);
-  const treatmentDurationDays = Number(payload.treatmentDurationDays);
-  const expiryDate = normalizeInput(payload.expiryDate);
   const mainDiagnosis = normalizeInput(payload.mainDiagnosis);
   const icd10Code = normalizeInput(payload.icd10Code);
   const clinicalNotes = normalizeInput(payload.clinicalNotes);
   const drugAllergies = normalizeInput(payload.drugAllergies);
+  const items = normalizePrescriptionItems(payload).map((item, index) => ({
+    ...item,
+    itemId: item.itemId || `ITEM-${index + 1}`
+  }));
+  const firstItem = items[0];
 
   if (
     !prescriptionId ||
     !patientId ||
     !hospitalName ||
     !prescriberLicense ||
-    !antibioticName ||
-    !antibioticClass ||
-    !dosage ||
-    !quantityLimit ||
-    !treatmentDurationDays ||
-    !expiryDate
+    items.length === 0
   ) {
     return {
       error: 'Missing required prescription fields.'
     };
   }
 
-  if (!Number.isInteger(quantityLimit) || quantityLimit <= 0) {
-    return {
-      error: 'Quantity limit must be a positive whole number.'
-    };
-  }
+  for (const item of items) {
+    if (!item.drugName || !item.drugClass || !item.dosage || !item.quantityLimit || !item.treatmentDurationDays || !item.expiryDate) {
+      return {
+        error: 'Each medicine item requires drug, class, dosage, quantity, duration, and expiry date.'
+      };
+    }
 
-  if (!Number.isInteger(treatmentDurationDays) || treatmentDurationDays <= 0) {
-    return {
-      error: 'Treatment duration must be a positive whole number.'
-    };
-  }
+    if (!Number.isInteger(item.quantityLimit) || item.quantityLimit <= 0) {
+      return {
+        error: 'Quantity limit must be a positive whole number.'
+      };
+    }
 
-  if (Number.isNaN(new Date(expiryDate).getTime())) {
-    return {
-      error: 'Expiry date must be a valid date.'
-    };
+    if (!Number.isInteger(item.treatmentDurationDays) || item.treatmentDurationDays <= 0) {
+      return {
+        error: 'Treatment duration must be a positive whole number.'
+      };
+    }
+
+    if (Number.isNaN(new Date(item.expiryDate).getTime())) {
+      return {
+        error: 'Expiry date must be a valid date.'
+      };
+    }
   }
 
   return {
     prescription: {
       prescriptionId,
       patientId,
+      hospitalId,
       hospitalName,
       prescriberLicense,
-      antibioticName,
-      antibioticClass,
-      dosage,
-      quantityLimit,
-      treatmentDurationDays,
-      expiryDate,
+      antibioticName: firstItem.drugName,
+      antibioticClass: firstItem.drugClass,
+      dosage: firstItem.dosage,
+      quantityLimit: firstItem.quantityLimit,
+      treatmentDurationDays: firstItem.treatmentDurationDays,
+      expiryDate: firstItem.expiryDate,
+      items,
       mainDiagnosis,
       icd10Code,
       clinicalNotes,
@@ -751,6 +887,7 @@ export async function createApp(options = {}) {
         username: userInput.username,
         email: userInput.email,
         role: userInput.role,
+        ...getRoleIds(userInput),
         passwordHash: hashPassword(userInput.password)
       });
       const session = await createAuthSession(db, user);
@@ -813,7 +950,7 @@ export async function createApp(options = {}) {
       const prescriptions = await db.getPrescriptions();
       response.json({
         prescriptions: request.user.role === 'doctor'
-          ? prescriptions.filter((prescription) => prescription.doctorId === request.user.username)
+          ? prescriptions.filter((prescription) => canManagePrescription(request.user, prescription))
           : prescriptions
       });
     } catch (error) {
@@ -877,7 +1014,8 @@ export async function createApp(options = {}) {
 
       const saved = await db.savePrescription({
         ...prescription,
-        doctorId: request.user.username
+        hospitalId: prescription.hospitalId || sanitizeUser(request.user).hospitalId || '',
+        doctorId: sanitizeUser(request.user).doctorId || request.user.username
       });
       response.status(201).json({
         prescription: saved,
@@ -1002,11 +1140,11 @@ export async function createApp(options = {}) {
   app.post('/api/transactions', requireAuth(['pharmacy']), async (request, response, next) => {
     try {
       const evaluated = applyAuditedOverride(await evaluateTransaction(db, request.body ?? {}), request.body ?? {});
-      evaluated.pharmacyId = request.user.username;
+      evaluated.pharmacyId = sanitizeUser(request.user).pharmacyId || request.user.username;
       const saved = await db.saveTransaction(evaluated);
 
       if (saved.status === 'Approved') {
-        await db.addPrescriptionDispense(saved.prescriptionId, saved.quantity);
+        await db.addPrescriptionDispense(saved.prescriptionId, saved.quantity, saved.itemId);
       }
 
       response.status(201).json({

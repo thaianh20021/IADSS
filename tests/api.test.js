@@ -122,7 +122,7 @@ describe('IADSS API', () => {
       })
       .expect(200);
 
-    assert.equal(login.body.user.pharmacyId, users.pharmacy.username);
+    assert.equal(login.body.user.pharmacyId, `PHARM-${users.pharmacy.username}`);
 
     const me = await request(app)
       .get('/api/auth/me')
@@ -130,7 +130,7 @@ describe('IADSS API', () => {
       .expect(200);
 
     assert.equal(me.body.user.role, 'moh');
-    assert.equal(me.body.user.mohId, me.body.user.username);
+    assert.equal(me.body.user.mohId, `MOH-${me.body.user.username}`);
   });
 
   it('blocks authenticated users from portals outside their role', async () => {
@@ -159,13 +159,14 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(response.body.transaction.status, 'Approved');
-    assert.equal(response.body.transaction.pharmacyId, users.pharmacy.username);
+    assert.equal(response.body.transaction.pharmacyId, `PHARM-${users.pharmacy.username}`);
     assert.equal(response.body.transaction.prescriptionStatus, 'Valid');
     assert.equal(response.body.message, 'Transaction Approved. Data synced to MOH.');
 
     const prescriptions = await request(app).get('/api/prescriptions').set(authHeader('doctor')).expect(200);
     const dispensed = prescriptions.body.prescriptions.find((item) => item.prescriptionId === prescription.prescriptionId);
-    assert.equal(dispensed.doctorId, users.doctor.username);
+    assert.equal(dispensed.doctorId, `DOC-${users.doctor.username}`);
+    assert.equal(dispensed.hospitalId, `HOSP-${users.doctor.username}`);
     assert.equal(dispensed.prescriptionStatus, 'Partially Dispensed');
     assert.equal(dispensed.dispensedQuantity, 10);
     assert.equal(dispensed.remainingQuantity, 10);
@@ -213,6 +214,84 @@ describe('IADSS API', () => {
       .expect(201);
 
     assert.equal(transaction.body.transaction.status, 'Approved');
+  });
+
+  it('supports separate organization IDs and multiple medicines in one prescription', async () => {
+    const prescriptionId = nextPrescriptionId('RX-MULTI');
+    const created = await request(app)
+      .post('/api/prescriptions')
+      .set(authHeader('doctor'))
+      .send({
+        prescriptionId,
+        patientId: '55555',
+        hospitalId: 'HOSP-MULTI-001',
+        hospitalName: 'Multi Care Hospital',
+        prescriberLicense: 'DOC-MULTI',
+        items: [
+          {
+            itemId: 'MED-1',
+            drugName: 'Amoxicillin',
+            drugClass: 'Penicillin',
+            dosage: '500mg',
+            quantityLimit: 10,
+            treatmentDurationDays: 5,
+            expiryDate: '2027-12-31'
+          },
+          {
+            itemId: 'MED-2',
+            drugName: 'Azithromycin',
+            drugClass: 'Macrolide',
+            dosage: '250mg',
+            quantityLimit: 6,
+            treatmentDurationDays: 3,
+            expiryDate: '2027-12-31'
+          }
+        ]
+      })
+      .expect(201);
+
+    assert.equal(created.body.prescription.doctorId, `DOC-${users.doctor.username}`);
+    assert.equal(created.body.prescription.hospitalId, 'HOSP-MULTI-001');
+    assert.equal(created.body.prescription.items.length, 2);
+
+    const lookup = await request(app).get(`/api/prescriptions/${prescriptionId}`).set(authHeader('pharmacy')).expect(200);
+    assert.equal(lookup.body.prescription.items.length, 2);
+    assert.equal(lookup.body.prescription.items[0].remainingQuantity, 10);
+    assert.equal(lookup.body.prescription.clinicalNotes, undefined);
+
+    const missingItem = await request(app)
+      .post('/api/transactions')
+      .set(authHeader('pharmacy'))
+      .send({
+        prescriptionId,
+        quantity: 1
+      })
+      .expect(201);
+
+    assert.equal(missingItem.body.transaction.status, 'Blocked');
+    assert.equal(missingItem.body.transaction.reason, 'Multiple medicines in this prescription. Select a medicine item before dispensing.');
+
+    const firstDispense = await request(app)
+      .post('/api/transactions')
+      .set(authHeader('pharmacy'))
+      .send({
+        prescriptionId,
+        itemId: 'MED-1',
+        hospitalId: 'HOSP-MULTI-001',
+        quantity: 5
+      })
+      .expect(201);
+
+    assert.equal(firstDispense.body.transaction.status, 'Approved');
+    assert.equal(firstDispense.body.transaction.itemId, 'MED-1');
+    assert.equal(firstDispense.body.transaction.hospitalId, 'HOSP-MULTI-001');
+
+    const afterFirst = await request(app).get(`/api/prescriptions/${prescriptionId}`).set(authHeader('pharmacy')).expect(200);
+    const med1 = afterFirst.body.prescription.items.find((item) => item.itemId === 'MED-1');
+    const med2 = afterFirst.body.prescription.items.find((item) => item.itemId === 'MED-2');
+    assert.equal(med1.remainingQuantity, 5);
+    assert.equal(med2.remainingQuantity, 6);
+    assert.equal(afterFirst.body.prescription.prescriptionStatus, 'Partially Dispensed');
   });
 
   it('limits doctors to prescriptions created by their own account', async () => {

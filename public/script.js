@@ -68,10 +68,14 @@ const dashboardDateFilter = document.querySelector('#dashboardDateFilter');
 const dashboardFilterButton = document.querySelector('#dashboardFilterButton');
 const exportReportButton = document.querySelector('#exportReportButton');
 const overrideDispenseButton = document.querySelector('#overrideDispenseButton');
+const medicationItems = document.querySelector('#medicationItems');
+const addMedicationButton = document.querySelector('#addMedicationButton');
+const roleIdFields = document.querySelectorAll('[data-role-id-field]');
 
 let lookupTimer = null;
 let currentMedicineResults = [];
 let lastSavedPrescription = null;
+let currentLoadedPrescription = null;
 let qrScanStream = null;
 let qrScanTimer = null;
 let authToken = window.localStorage.getItem('iadssAuthToken') || '';
@@ -150,7 +154,15 @@ function setAuthMode(mode) {
   showRegisterButton.classList.toggle('active', !isLogin);
   showLoginButton.setAttribute('aria-selected', String(isLogin));
   showRegisterButton.setAttribute('aria-selected', String(!isLogin));
+  updateRegisterRoleFields();
   clearAlert(authAlertArea);
+}
+
+function updateRegisterRoleFields() {
+  const role = registerForm.elements.role?.value ?? 'pharmacy';
+  roleIdFields.forEach((field) => {
+    field.hidden = field.dataset.roleIdField !== role;
+  });
 }
 
 function getAuthHeaders(headers = {}) {
@@ -181,6 +193,10 @@ function applyRoleAccess() {
   tabButtons.forEach((button) => {
     const allowed = currentUser && canAccessTab(button.dataset.tab);
     button.disabled = !allowed;
+    button.classList.toggle('is-disabled', !allowed);
+    if (button.classList.contains('sidebar-cta')) {
+      button.hidden = !allowed;
+    }
   });
 
   document.querySelectorAll('.role-card').forEach((card) => {
@@ -209,9 +225,15 @@ function showLoggedIn(user) {
   const roleIdLabel = user.role === 'pharmacy'
     ? `Pharmacy ID: ${user.pharmacyId}`
     : user.role === 'doctor'
-      ? `Doctor ID: ${user.doctorId}`
+      ? `Doctor ID: ${user.doctorId} / Hospital ID: ${user.hospitalId}`
       : `MOH ID: ${user.mohId}`;
   currentUserLabel.textContent = `${user.name} (${roleIdLabel})`;
+  if (prescriptionForm?.elements.doctorId) {
+    prescriptionForm.elements.doctorId.value = user.doctorId || '';
+  }
+  if (prescriptionForm?.elements.hospitalId && user.hospitalId && !prescriptionForm.elements.hospitalId.value) {
+    prescriptionForm.elements.hospitalId.value = user.hospitalId;
+  }
   applyRoleAccess();
   setActiveTab(defaultTabByRole[user.role] ?? 'rolePanel');
 }
@@ -356,6 +378,103 @@ function populateDrugClassSelects() {
       select.value = currentValue;
     }
   });
+}
+
+function getPrescriptionItems(prescription) {
+  const items = Array.isArray(prescription?.items) ? prescription.items : [];
+
+  if (items.length > 0) {
+    return items;
+  }
+
+  if (!prescription) {
+    return [];
+  }
+
+  return [{
+    itemId: 'ITEM-1',
+    drugName: prescription.drugName ?? prescription.antibioticName,
+    drugClass: prescription.drugClass ?? prescription.antibioticClass,
+    dosage: prescription.dosage,
+    quantityLimit: prescription.quantityLimit,
+    dispensedQuantity: prescription.dispensedQuantity ?? 0,
+    remainingQuantity: prescription.remainingQuantity ?? prescription.quantityLimit,
+    treatmentDurationDays: prescription.treatmentDurationDays,
+    expiryDate: prescription.expiryDate,
+    prescriptionStatus: prescription.prescriptionStatus
+  }];
+}
+
+function getItemName(item) {
+  return item.drugName ?? item.antibioticName ?? item.drug ?? 'Medicine';
+}
+
+function renumberMedicationItems() {
+  const rows = [...medicationItems.querySelectorAll('[data-medication-item]')];
+  rows.forEach((row, index) => {
+    row.querySelector('.medication-item-title strong').textContent = `Medicine ${index + 1}`;
+    const removeButton = row.querySelector('[data-remove-medication]');
+    if (removeButton) {
+      removeButton.disabled = rows.length === 1;
+    }
+  });
+}
+
+function createMedicationItem() {
+  const item = document.createElement('article');
+  item.className = 'medication-item';
+  item.dataset.medicationItem = '';
+  item.innerHTML = `
+    <div class="medication-item-title"><strong>Medicine</strong><button class="icon-only-button" type="button" data-remove-medication aria-label="Remove medicine"><span class="material-symbols-outlined">delete</span></button></div>
+    <label><span>Drug Name</span><input name="drugName" type="text" placeholder="Drug name" autocomplete="off" required></label>
+    <label><span>Drug / Antibiotic Class</span><select name="drugClass" required><option value="">Select class</option></select></label>
+    <label><span>Dosage</span><input name="dosage" type="text" placeholder="e.g. 500mg" autocomplete="off" required></label>
+    <label><span>Quantity Limit</span><input name="quantityLimit" type="number" min="1" step="1" placeholder="Maximum quantity" required></label>
+    <label><span>Treatment Duration (days)</span><input name="treatmentDurationDays" type="number" min="1" step="1" placeholder="Number of days" required></label>
+    <label><span>Expiry Date</span><input name="expiryDate" type="date" required></label>
+  `;
+  return item;
+}
+
+function addMedicationItem(values = {}) {
+  const item = createMedicationItem();
+  medicationItems.append(item);
+  populateDrugClassSelects();
+  item.querySelector('[name="drugName"]').value = values.drugName ?? values.antibioticName ?? '';
+  item.querySelector('[name="drugClass"]').value = values.drugClass ?? values.antibioticClass ?? '';
+  item.querySelector('[name="dosage"]').value = values.dosage ?? '';
+  item.querySelector('[name="quantityLimit"]').value = values.quantityLimit ?? '';
+  item.querySelector('[name="treatmentDurationDays"]').value = values.treatmentDurationDays ?? '';
+  item.querySelector('[name="expiryDate"]').value = values.expiryDate ?? '';
+  renumberMedicationItems();
+}
+
+function resetMedicationItems() {
+  const rows = [...medicationItems.querySelectorAll('[data-medication-item]')];
+  rows.slice(1).forEach((row) => row.remove());
+  rows[0]?.querySelectorAll('input, select').forEach((input) => {
+    input.value = '';
+  });
+  renumberMedicationItems();
+}
+
+function getMedicationFormItems() {
+  return [...medicationItems.querySelectorAll('[data-medication-item]')].map((row, index) => ({
+    itemId: `ITEM-${index + 1}`,
+    drugName: row.querySelector('[name="drugName"]').value,
+    drugClass: row.querySelector('[name="drugClass"]').value,
+    dosage: row.querySelector('[name="dosage"]').value,
+    quantityLimit: Number(row.querySelector('[name="quantityLimit"]').value),
+    treatmentDurationDays: Number(row.querySelector('[name="treatmentDurationDays"]').value),
+    expiryDate: row.querySelector('[name="expiryDate"]').value
+  }));
+}
+
+function formatMedicineSummary(prescription) {
+  const items = getPrescriptionItems(prescription);
+  return items.length > 1
+    ? `${items.length} medicines: ${items.map(getItemName).join(', ')}`
+    : getItemName(items[0] ?? prescription);
 }
 
 function renderSettingsList(category, target, items) {
@@ -511,7 +630,7 @@ function renderDashboardTransactions(transactions) {
   if (transactions.length === 0) {
     rows.innerHTML = `
       <tr>
-        <td colspan="13" class="empty-cell">No transactions match the current filters.</td>
+        <td colspan="15" class="empty-cell">No transactions match the current filters.</td>
       </tr>
     `;
     return;
@@ -529,7 +648,9 @@ function renderDashboardTransactions(transactions) {
           <td>${escapeHtml(formatTimestamp(transaction.timestamp))}</td>
           <td>${escapeHtml(transaction.pharmacyId || 'N/A')}</td>
           <td>${escapeHtml(transaction.prescriptionId || 'N/A')}</td>
+          <td>${escapeHtml(transaction.itemId || 'N/A')}</td>
           <td>${escapeHtml(transaction.patientId || 'N/A')}</td>
+          <td>${escapeHtml(transaction.hospitalId || 'N/A')}</td>
           <td>${escapeHtml(transaction.hospitalName || 'N/A')}</td>
           <td>${escapeHtml(transaction.antibiotic || 'N/A')}</td>
           <td>${escapeHtml(transaction.quantity || 'N/A')}</td>
@@ -551,8 +672,8 @@ function refreshDashboardFilters() {
 
 function exportDashboardCsv() {
   const transactions = getFilteredDashboardTransactions();
-  const headers = ['Timestamp', 'Pharmacy ID', 'Prescription ID', 'Patient ID', 'Hospital / Clinic', 'Drug', 'Quantity', 'Duration', 'Rx Status', 'Status', 'Reason', 'Pharmacist', 'Override Reason'];
-  const dataRows = transactions.map((transaction) => [transaction.timestamp, transaction.pharmacyId, transaction.prescriptionId, transaction.patientId, transaction.hospitalName, transaction.antibiotic, transaction.quantity, transaction.treatmentDurationDays, transaction.prescriptionStatus, transaction.status, transaction.reason, transaction.pharmacistLicense, transaction.overrideReason]);
+  const headers = ['Timestamp', 'Pharmacy ID', 'Prescription ID', 'Item ID', 'Patient ID', 'Hospital ID', 'Hospital / Clinic', 'Drug', 'Quantity', 'Duration', 'Rx Status', 'Status', 'Reason', 'Pharmacist', 'Override Reason'];
+  const dataRows = transactions.map((transaction) => [transaction.timestamp, transaction.pharmacyId, transaction.prescriptionId, transaction.itemId, transaction.patientId, transaction.hospitalId, transaction.hospitalName, transaction.antibiotic, transaction.quantity, transaction.treatmentDurationDays, transaction.prescriptionStatus, transaction.status, transaction.reason, transaction.pharmacistLicense, transaction.overrideReason]);
   const csv = [headers, ...dataRows]
     .map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(','))
     .join('\n');
@@ -598,6 +719,7 @@ function selectAuthRole(role) {
   if (registerForm.elements.role) {
     registerForm.elements.role.value = role;
   }
+  updateRegisterRoleFields();
   const labels = { doctor: 'Doctor / Hospital', pharmacy: 'Pharmacy', moh: 'MOH' };
   if (authRoleHint) {
     authRoleHint.textContent = `${labels[role]} selected. Register will use this role.`;
@@ -607,7 +729,7 @@ function selectAuthRole(role) {
 async function loadTransactions() {
   rows.innerHTML = `
     <tr>
-      <td colspan="13" class="empty-cell">Loading transactions...</td>
+      <td colspan="15" class="empty-cell">Loading transactions...</td>
     </tr>
   `;
 
@@ -626,7 +748,7 @@ async function loadTransactions() {
     updateMetrics([]);
     rows.innerHTML = `
       <tr>
-        <td colspan="13" class="empty-cell">Unable to load transactions.</td>
+        <td colspan="15" class="empty-cell">Unable to load transactions.</td>
       </tr>
     `;
   }
@@ -635,7 +757,7 @@ async function loadTransactions() {
 async function loadPrescriptions() {
   prescriptionRows.innerHTML = `
     <tr>
-      <td colspan="13" class="empty-cell">Loading prescriptions...</td>
+      <td colspan="12" class="empty-cell">Loading prescriptions...</td>
     </tr>
   `;
 
@@ -652,7 +774,7 @@ async function loadPrescriptions() {
     if (prescriptions.length === 0) {
       prescriptionRows.innerHTML = `
         <tr>
-          <td colspan="13" class="empty-cell">No prescriptions saved.</td>
+          <td colspan="12" class="empty-cell">No prescriptions saved.</td>
         </tr>
       `;
       return;
@@ -662,21 +784,25 @@ async function loadPrescriptions() {
       .map((prescription) => {
         const prescriptionStatusClass = getStatusClass(prescription.prescriptionStatus);
         const canCancel = !['Cancelled', 'Fully Dispensed'].includes(prescription.prescriptionStatus);
+        const items = getPrescriptionItems(prescription);
+        const firstExpiry = items[0]?.expiryDate ?? prescription.expiryDate;
+        const dispensedTotal = prescription.totalDispensedQuantity ?? items.reduce((sum, item) => sum + Number(item.dispensedQuantity ?? 0), 0);
+        const quantityTotal = prescription.totalQuantityLimit ?? items.reduce((sum, item) => sum + Number(item.quantityLimit ?? 0), 0);
+        const remainingTotal = prescription.totalRemainingQuantity ?? items.reduce((sum, item) => sum + Number(item.remainingQuantity ?? 0), 0);
 
         return `
           <tr>
             <td>${escapeHtml(prescription.prescriptionId)}</td>
             <td>${escapeHtml(prescription.doctorId || 'N/A')}</td>
             <td>${escapeHtml(prescription.patientId)}</td>
+            <td>${escapeHtml(prescription.hospitalId || 'N/A')}</td>
             <td>${escapeHtml(prescription.hospitalName)}</td>
             <td>${escapeHtml(prescription.prescriberLicense)}</td>
-            <td>${escapeHtml(prescription.antibioticName)}</td>
+            <td><div class="medication-summary"><strong>${escapeHtml(formatMedicineSummary(prescription))}</strong><span>${escapeHtml(items.map((item) => `${getItemName(item)} ${item.dosage || ''}`.trim()).join(' | '))}</span></div></td>
             <td><span class="status-badge ${prescriptionStatusClass}">${escapeHtml(prescription.prescriptionStatus)}</span></td>
-            <td>${escapeHtml(prescription.antibioticClass)}</td>
-            <td>${escapeHtml(prescription.dosage)}</td>
-            <td>${escapeHtml(prescription.dispensedQuantity ?? 0)} / ${escapeHtml(prescription.quantityLimit)}</td>
-            <td>${escapeHtml(prescription.remainingQuantity ?? prescription.quantityLimit)}</td>
-            <td>${escapeHtml(prescription.expiryDate)}</td>
+            <td>${escapeHtml(dispensedTotal)} / ${escapeHtml(quantityTotal)}</td>
+            <td>${escapeHtml(remainingTotal)}</td>
+            <td>${escapeHtml(firstExpiry)}</td>
             <td>
               <button class="ghost-button table-button" type="button" data-print-prescription="${escapeHtml(prescription.prescriptionId)}">Print</button>
               <button class="secondary-button table-button" type="button" data-cancel-prescription="${escapeHtml(prescription.prescriptionId)}" ${canCancel ? '' : 'disabled'}>Cancel</button>
@@ -688,7 +814,7 @@ async function loadPrescriptions() {
   } catch (error) {
     prescriptionRows.innerHTML = `
       <tr>
-        <td colspan="13" class="empty-cell">Unable to load prescriptions.</td>
+        <td colspan="12" class="empty-cell">Unable to load prescriptions.</td>
       </tr>
     `;
   }
@@ -714,33 +840,52 @@ async function searchMedicines(query) {
   }
 }
 
-function renderLoadedPrescription(prescription) {
+function renderLoadedPrescription(prescription, selectedItemId = '') {
+  const items = getPrescriptionItems(prescription);
+  const selectedItem = items.find((item) => item.itemId === selectedItemId) ?? (items.length === 1 ? items[0] : null);
   loadedPrescriptionSummary.classList.remove('empty');
   loadedPrescriptionSummary.innerHTML = `
     <div>
-      <strong>${escapeHtml(prescription.drugName)}</strong>
-      <span>${escapeHtml(prescription.dosage)} Â· ${escapeHtml(prescription.drugClass)}</span>
+      <strong>${escapeHtml(prescription.itemSummary || formatMedicineSummary(prescription))}</strong>
+      <span>${escapeHtml(prescription.prescriptionId)} - ${escapeHtml(prescription.hospitalName)}${prescription.hospitalId ? ` - ${escapeHtml(prescription.hospitalId)}` : ''}</span>
     </div>
     <div>
       <span class="status-badge ${getStatusClass(prescription.prescriptionStatus)}">${escapeHtml(prescription.prescriptionStatus)}</span>
-      <span>${escapeHtml(prescription.dispensedQuantity)} / ${escapeHtml(prescription.quantityLimit)} dispensed, ${escapeHtml(prescription.remainingQuantity)} remaining</span>
+      <span>${escapeHtml(prescription.totalDispensedQuantity ?? prescription.dispensedQuantity)} / ${escapeHtml(prescription.totalQuantityLimit ?? prescription.quantityLimit)} dispensed, ${escapeHtml(prescription.totalRemainingQuantity ?? prescription.remainingQuantity)} remaining</span>
+    </div>
+    <div class="prescription-item-list">
+      ${items.map((item) => `
+        <button class="prescription-item-button ${selectedItem?.itemId === item.itemId ? 'selected' : ''}" type="button" data-select-dispense-item="${escapeHtml(item.itemId)}">
+          <strong>${escapeHtml(getItemName(item))}</strong>
+          <small>${escapeHtml(item.itemId)} - ${escapeHtml(item.dosage || 'No dosage')} - ${escapeHtml(item.drugClass || item.antibioticClass || 'No class')}</small>
+          <small>${escapeHtml(item.dispensedQuantity ?? 0)} / ${escapeHtml(item.quantityLimit)} dispensed, ${escapeHtml(item.remainingQuantity ?? item.quantityLimit)} remaining</small>
+        </button>
+      `).join('')}
     </div>
   `;
 }
 
-function populateTransactionForm(prescription) {
+function populateTransactionForm(prescription, selectedItem = null) {
+  const items = getPrescriptionItems(prescription);
+  const item = selectedItem ?? (items.length === 1 ? items[0] : null);
   form.elements.prescriptionId.value = prescription.prescriptionId;
   form.elements.patientId.value = prescription.patientId;
+  form.elements.hospitalId.value = prescription.hospitalId || '';
   form.elements.hospitalName.value = prescription.hospitalName;
   form.elements.prescriberLicense.value = prescription.prescriberLicense;
-  form.elements.drug.value = prescription.drugName;
-  form.elements.drugClass.value = prescription.drugClass;
-  form.elements.dosage.value = prescription.dosage;
-  form.elements.treatmentDurationDays.value = prescription.treatmentDurationDays;
-  document.querySelector('#quantityLimitDisplay').value = prescription.quantityLimit;
-  document.querySelector('#remainingQuantityDisplay').value = prescription.remainingQuantity;
+  form.elements.itemId.value = item?.itemId ?? '';
+  form.elements.drug.value = item ? getItemName(item) : '';
+  form.elements.drugClass.value = item?.drugClass ?? item?.antibioticClass ?? '';
+  form.elements.dosage.value = item?.dosage ?? '';
+  form.elements.treatmentDurationDays.value = item?.treatmentDurationDays ?? '';
+  document.querySelector('#quantityLimitDisplay').value = item?.quantityLimit ?? '';
+  document.querySelector('#remainingQuantityDisplay').value = item?.remainingQuantity ?? '';
   form.elements.quantity.removeAttribute('max');
-  form.elements.quantity.value = prescription.remainingQuantity > 0 ? Math.min(1, prescription.remainingQuantity) : '';
+  form.elements.quantity.value = item?.remainingQuantity > 0 ? Math.min(1, item.remainingQuantity) : '';
+
+  if (!item && items.length > 1) {
+    lookupSource.textContent = 'Select a medicine item before dispensing.';
+  }
 }
 
 async function loadPrescriptionForPharmacy(id = lookupPrescriptionId.value, shouldClearAlert = true) {
@@ -759,12 +904,19 @@ async function loadPrescriptionForPharmacy(id = lookupPrescriptionId.value, shou
       throw new Error(data.error || 'Prescription not found');
     }
 
-    populateTransactionForm(data.prescription);
-    renderLoadedPrescription(data.prescription);
+    currentLoadedPrescription = data.prescription;
+    const items = getPrescriptionItems(data.prescription);
+    const selectedItem = items.length === 1 ? items[0] : null;
+    populateTransactionForm(data.prescription, selectedItem);
+    renderLoadedPrescription(data.prescription, selectedItem?.itemId ?? '');
     if (shouldClearAlert) {
       clearAlert(alertArea);
     }
+    if (items.length > 1) {
+      setAlert('warning', 'Select a medicine item before dispensing.', `${items.length} medicines found in this prescription.`);
+    }
   } catch (error) {
+    currentLoadedPrescription = null;
     loadedPrescriptionSummary.classList.add('empty');
     loadedPrescriptionSummary.textContent = 'No prescription loaded.';
     setAlert('danger', 'HIGH RISK ALERT: Invalid Prescription. Sale Blocked.', error.message);
@@ -865,22 +1017,27 @@ async function startQrScanner() {
 
 function getPrescriptionFormPayload() {
   const formData = new FormData(prescriptionForm);
+  const items = getMedicationFormItems();
+  const firstItem = items[0] ?? {};
 
   return {
     prescriptionId: formData.get('prescriptionId'),
     patientId: formData.get('patientId'),
+    doctorId: formData.get('doctorId'),
+    hospitalId: formData.get('hospitalId'),
     hospitalName: formData.get('hospitalName'),
     prescriberLicense: formData.get('prescriberLicense'),
     mainDiagnosis: formData.get('mainDiagnosis'),
     icd10Code: formData.get('icd10Code'),
     clinicalNotes: formData.get('clinicalNotes'),
     drugAllergies: formData.get('drugAllergies'),
-    drugName: formData.get('drugName'),
-    drugClass: formData.get('drugClass'),
-    dosage: formData.get('dosage'),
-    quantityLimit: Number(formData.get('quantityLimit')),
-    treatmentDurationDays: Number(formData.get('treatmentDurationDays')),
-    expiryDate: formData.get('expiryDate')
+    items,
+    drugName: firstItem.drugName,
+    drugClass: firstItem.drugClass,
+    dosage: firstItem.dosage,
+    quantityLimit: firstItem.quantityLimit,
+    treatmentDurationDays: firstItem.treatmentDurationDays,
+    expiryDate: firstItem.expiryDate
   };
 }
 
@@ -889,19 +1046,21 @@ function renderPrintPrescription(prescription) {
     return;
   }
 
+  const items = getPrescriptionItems(prescription);
   printPrescriptionId.textContent = prescription.prescriptionId;
   qrImage.src = `/api/prescriptions/${encodeURIComponent(prescription.prescriptionId)}/qr`;
   qrImage.alt = `QR code for prescription ${prescription.prescriptionId}`;
   printPrescriptionDetails.innerHTML = `
     <p><strong>Patient ID:</strong> ${escapeHtml(prescription.patientId)}</p>
     <p><strong>Doctor ID:</strong> ${escapeHtml(prescription.doctorId || 'N/A')}</p>
+    <p><strong>Hospital ID:</strong> ${escapeHtml(prescription.hospitalId || 'N/A')}</p>
     <p><strong>Hospital:</strong> ${escapeHtml(prescription.hospitalName)}</p>
     <p><strong>Prescriber:</strong> ${escapeHtml(prescription.prescriberLicense)}</p>
-    <p><strong>Drug:</strong> ${escapeHtml(prescription.antibioticName ?? prescription.drugName)}</p>
-    <p><strong>Dosage:</strong> ${escapeHtml(prescription.dosage)}</p>
-    <p><strong>Quantity:</strong> ${escapeHtml(prescription.quantityLimit)}</p>
-    <p><strong>Duration:</strong> ${escapeHtml(prescription.treatmentDurationDays)} days</p>
-    <p><strong>Expiry:</strong> ${escapeHtml(prescription.expiryDate)}</p>
+    <div class="print-items">
+      ${items.map((item) => `
+        <p><strong>${escapeHtml(item.itemId)}:</strong> ${escapeHtml(getItemName(item))} - ${escapeHtml(item.dosage || 'No dosage')} - Qty ${escapeHtml(item.quantityLimit)} - ${escapeHtml(item.treatmentDurationDays)} days - Exp ${escapeHtml(item.expiryDate)}</p>
+      `).join('')}
+    </div>
   `;
   printPrescription.classList.add('ready');
 }
@@ -1006,6 +1165,10 @@ registerForm.addEventListener('submit', async (event) => {
     await submitAuthForm('/api/auth/register', {
       name: formData.get('name'),
       username: formData.get('username'),
+      doctorId: formData.get('doctorId'),
+      hospitalId: formData.get('hospitalId'),
+      pharmacyId: formData.get('pharmacyId'),
+      mohId: formData.get('mohId'),
       email: formData.get('email'),
       password: formData.get('password'),
       role: formData.get('role')
@@ -1082,6 +1245,7 @@ lookupPrescriptionId.addEventListener('keydown', (event) => {
 
 resetTransactionFormButton.addEventListener('click', () => {
   form.reset();
+  currentLoadedPrescription = null;
   clearAlert(alertArea);
   lookupPrescriptionId.value = '';
   loadedPrescriptionSummary.classList.add('empty');
@@ -1093,6 +1257,13 @@ resetTransactionFormButton.addEventListener('click', () => {
 
 resetPrescriptionFormButton.addEventListener('click', () => {
   prescriptionForm.reset();
+  resetMedicationItems();
+  if (currentUser?.doctorId) {
+    prescriptionForm.elements.doctorId.value = currentUser.doctorId;
+  }
+  if (currentUser?.hospitalId) {
+    prescriptionForm.elements.hospitalId.value = currentUser.hospitalId;
+  }
   lastSavedPrescription = null;
   printPrescription.classList.remove('ready');
   printPrescriptionId.textContent = 'No prescription selected';
@@ -1100,6 +1271,12 @@ resetPrescriptionFormButton.addEventListener('click', () => {
   qrImage.removeAttribute('src');
   clearAlert(prescriptionAlertArea);
 });
+
+addMedicationButton?.addEventListener('click', () => {
+  addMedicationItem();
+});
+
+registerForm.elements.role?.addEventListener('change', updateRegisterRoleFields);
 
 drugListForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -1173,6 +1350,27 @@ document.addEventListener('click', async (event) => {
   const deleteButton = event.target.closest('.icon-button[data-category][data-value]');
   const cancelButton = event.target.closest('[data-cancel-prescription]');
   const printButton = event.target.closest('[data-print-prescription]');
+  const selectDispenseItemButton = event.target.closest('[data-select-dispense-item]');
+  const removeMedicationButton = event.target.closest('[data-remove-medication]');
+
+  if (selectDispenseItemButton && currentLoadedPrescription) {
+    const item = getPrescriptionItems(currentLoadedPrescription).find((candidate) => candidate.itemId === selectDispenseItemButton.dataset.selectDispenseItem);
+
+    if (item) {
+      populateTransactionForm(currentLoadedPrescription, item);
+      renderLoadedPrescription(currentLoadedPrescription, item.itemId);
+      clearAlert(alertArea);
+      lookupSource.textContent = `Selected ${getItemName(item)} (${item.itemId})`;
+    }
+  }
+
+  if (removeMedicationButton) {
+    const row = removeMedicationButton.closest('[data-medication-item]');
+    if (row && medicationItems.querySelectorAll('[data-medication-item]').length > 1) {
+      row.remove();
+      renumberMedicationItems();
+    }
+  }
 
   if (deleteButton) {
     const { category, value } = deleteButton.dataset;
@@ -1238,7 +1436,9 @@ form.addEventListener('submit', async (event) => {
   const formData = new FormData(form);
   const payload = {
     prescriptionId: formData.get('prescriptionId'),
+    itemId: formData.get('itemId'),
     patientId: formData.get('patientId'),
+    hospitalId: formData.get('hospitalId'),
     hospitalName: formData.get('hospitalName'),
     prescriberLicense: formData.get('prescriberLicense'),
     drug: formData.get('drug'),
@@ -1250,6 +1450,11 @@ form.addEventListener('submit', async (event) => {
     pharmacistLicense: formData.get('pharmacistLicense'),
     overrideReason: formData.get('overrideReason')
   };
+
+  if (currentLoadedPrescription && getPrescriptionItems(currentLoadedPrescription).length > 1 && !payload.itemId) {
+    setAlert('danger', 'Select a medicine item before dispensing.');
+    return;
+  }
 
   try {
     const response = await apiFetch('/api/transactions', {
@@ -1288,6 +1493,13 @@ prescriptionForm.addEventListener('submit', async (event) => {
   try {
     await savePrescriptionFromForm('Prescription saved. Pharmacy can verify by Prescription ID / QR code.');
     prescriptionForm.reset();
+    resetMedicationItems();
+    if (currentUser?.doctorId) {
+      prescriptionForm.elements.doctorId.value = currentUser.doctorId;
+    }
+    if (currentUser?.hospitalId) {
+      prescriptionForm.elements.hospitalId.value = currentUser.hospitalId;
+    }
   } catch (error) {
     setPrescriptionAlert('danger', 'Unable to save prescription.', error.message);
   }
